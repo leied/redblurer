@@ -110,3 +110,69 @@ test("configsEqual compares settings, not object identity", () => {
   assert.equal(Config.configsEqual(a, { ...a, domains: ["y.com", "x.com"] }), false);
   assert.equal(Config.configsEqual(a, { ...a, enabled: false }), false);
 });
+
+// ── Look-away settings ──────────────────────────────────────────────────────
+
+test("the idle delay is clamped to something sane", () => {
+  assert.equal(Config.clampRehideSeconds(-5), Config.MIN_REHIDE_SECONDS);
+  assert.equal(Config.clampRehideSeconds(0), 0, "zero is a real choice: never");
+  assert.equal(Config.clampRehideSeconds(999999), Config.MAX_REHIDE_SECONDS);
+  assert.equal(Config.clampRehideSeconds("120"), 120);
+  assert.equal(Config.clampRehideSeconds(90.4), 90);
+  assert.equal(Config.clampRehideSeconds(NaN), Config.DEFAULT_REHIDE_SECONDS);
+});
+
+test("re-hiding on switch away is on by default", () => {
+  // It only ever affects media you chose to reveal, so the safe default costs
+  // nothing and covers walking away from the screen.
+  const cfg = Config.normalizeConfig(null);
+  assert.equal(cfg.rehideOnBlur, true);
+  assert.equal(cfg.deepScan, true);
+  assert.equal(cfg.rehideAfterSeconds, Config.DEFAULT_REHIDE_SECONDS);
+});
+
+test("the new settings survive a round trip through export and import", () => {
+  const original = Config.normalizeConfig({
+    rehideOnBlur: false,
+    rehideAfterSeconds: 300,
+    deepScan: false,
+  });
+  const result = Config.parseImport(Config.serializeExport(original));
+  assert.ok(result.ok);
+  assert.deepEqual(result.config, original);
+});
+
+// ── The per-site switch ─────────────────────────────────────────────────────
+
+test("adding a host puts it on the list once", () => {
+  assert.deepEqual(Config.setHostInDomains([], "news.ycombinator.com", true), [
+    "news.ycombinator.com",
+  ]);
+  assert.deepEqual(Config.setHostInDomains(["x.com"], "x.com", true), ["x.com"]);
+});
+
+test("adding a host already covered by a parent changes nothing", () => {
+  // reddit.com already covers old.reddit.com, so listing both is noise.
+  assert.deepEqual(Config.setHostInDomains(["reddit.com"], "old.reddit.com", true), [
+    "reddit.com",
+  ]);
+});
+
+test("removing a host removes whatever entry was covering it", () => {
+  // Dropping only an exact match would leave the parent listed, and the
+  // switch would flip straight back on.
+  assert.deepEqual(
+    Config.setHostInDomains(["reddit.com", "x.com"], "old.reddit.com", false),
+    ["x.com"],
+  );
+  assert.deepEqual(Config.setHostInDomains(["x.com"], "x.com", false), []);
+});
+
+test("the per-site switch normalizes what it is given", () => {
+  assert.deepEqual(Config.setHostInDomains([], "WWW.Example.com", true), ["example.com"]);
+});
+
+test("a host that is not a hostname leaves the list alone", () => {
+  assert.deepEqual(Config.setHostInDomains(["x.com"], "", true), ["x.com"]);
+  assert.deepEqual(Config.setHostInDomains(["x.com"], "not a domain", false), ["x.com"]);
+});

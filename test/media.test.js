@@ -144,3 +144,59 @@ test("the media selector and the tag list agree with each other", () => {
     );
   }
 });
+
+// ── Deep scan ───────────────────────────────────────────────────────────────
+
+test("a computed background is only media when it carries an image", () => {
+  assert.ok(Media.hasComputedBackgroundImage('url("photo.jpg")'));
+  assert.ok(Media.hasComputedBackgroundImage('url("a.png"), url("b.png")'));
+  assert.equal(Media.hasComputedBackgroundImage("none"), false);
+  assert.equal(Media.hasComputedBackgroundImage(""), false);
+  assert.equal(Media.hasComputedBackgroundImage(null), false);
+});
+
+test("a plain gradient is not worth the deep scan's attention", () => {
+  // Gradients are decoration, not content, and pages are full of them.
+  // The inline path is more permissive because it predates this and matches
+  // what the previous version did.
+  assert.equal(Media.hasComputedBackgroundImage("linear-gradient(red, blue)"), false);
+});
+
+test("the deep scan skips what could never be content", () => {
+  for (const tag of ["HTML", "BODY", "SCRIPT", "STYLE", "IFRAME", "SVG"]) {
+    assert.equal(Media.isDeepScanCandidate(fakeEl(tag)), false, `${tag} should be skipped`);
+  }
+});
+
+test("the deep scan skips elements the cheap path already handled", () => {
+  assert.equal(
+    Media.isDeepScanCandidate(fakeEl("DIV", { "data-redblurer": "blurred" })),
+    false,
+  );
+  assert.equal(Media.isDeepScanCandidate(fakeEl("DIV", { "data-redblurer-skip": "" })), false);
+});
+
+test("an ordinary container is worth looking at", () => {
+  assert.ok(Media.isDeepScanCandidate(fakeEl("DIV")));
+  assert.ok(Media.isDeepScanCandidate(fakeEl("SECTION")));
+  assert.ok(Media.isDeepScanCandidate(fakeEl("A")));
+});
+
+test("an element filling the viewport is a backdrop, not content", () => {
+  // Blurring one of these would blur every word sitting on top of it.
+  const viewport = { width: 1280, height: 800 };
+  assert.ok(Media.isPageBackground({ width: 1280, height: 800 }, viewport));
+  assert.ok(Media.isPageBackground({ width: 1200, height: 760 }, viewport));
+  assert.equal(Media.isPageBackground({ width: 400, height: 300 }, viewport), false);
+  assert.equal(Media.isPageBackground({ width: 1280, height: 200 }, viewport), false);
+});
+
+test("the backdrop check needs a viewport to compare against", () => {
+  assert.equal(Media.isPageBackground({ width: 100, height: 100 }, null), false);
+  assert.equal(Media.isPageBackground({ width: 100, height: 100 }, { width: 0, height: 0 }), false);
+});
+
+test("an element the deep scan already resolved counts as media", () => {
+  // The marker is what stops the expensive lookup happening twice.
+  assert.ok(Media.isMediaElement(fakeEl("DIV", { [Media.BG_ATTR]: "" })));
+});

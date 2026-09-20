@@ -46,18 +46,13 @@
     }
     [${STATE_ATTR}="${STATE.BLURRED}"][${HOVER_ATTR}],
     [${STATE_ATTR}="${STATE.BLURRED}"]:hover {
-      filter: blur(0) !important;
+      filter: blur(var(--redblurer-reveal, 0px)) !important;
       transition: filter var(--redblurer-duration, 200ms)
         var(--redblurer-ease, cubic-bezier(0.2, 0, 0, 1)) !important;
     }
     [${STATE_ATTR}="${STATE.REVEALED}"] {
       transition: filter var(--redblurer-duration, 200ms)
         var(--redblurer-ease, cubic-bezier(0.2, 0, 0, 1)) !important;
-    }
-    :host-context(html.${LOCKED_CLASS}) [${STATE_ATTR}="${STATE.BLURRED}"] {
-      filter: blur(var(--redblurer-radius, 18px)) !important;
-      cursor: default !important;
-      transition: none !important;
     }
   `;
 
@@ -68,7 +63,11 @@
   let settingsLoaded = false;
 
   /** Elements the user has revealed, for "keep media unblurred". */
-  const revealed = new WeakSet();
+  let revealed = new WeakSet();
+  /** Elements the deep scan has already asked the browser about. */
+  let deepScanned = new WeakSet();
+  /** Elements waiting on a deep scan. */
+  const deepScanQueue = new Set();
   /** Shadow roots we have already styled and observed. */
   const knownRoots = new WeakSet();
   /** Elements queued for a state refresh on the next frame. */
@@ -80,6 +79,8 @@
   let pointerX = -1;
   let pointerY = -1;
   let hoverHandle = 0;
+  let deepScanHandle = 0;
+  let idleTimer = 0;
 
   // ── Boot guard ────────────────────────────────────────────────────────────
   // Settings arrive asynchronously. Cover everything until they do.
@@ -89,8 +90,16 @@
 
   function applyDocumentFlags() {
     if (!root) return;
+    const locked = active && config.lockBlur;
     root.style.setProperty("--redblurer-radius", config.blurRadius + "px");
-    root.classList.toggle(LOCKED_CLASS, active && config.lockBlur);
+    // Holding the blur means revealing lands on the same radius it started
+    // from. Custom properties cross shadow boundaries, so one assignment
+    // covers the document and every web component on the page.
+    root.style.setProperty(
+      "--redblurer-reveal",
+      locked ? config.blurRadius + "px" : "0px",
+    );
+    root.classList.toggle(LOCKED_CLASS, locked);
     if (settingsLoaded) root.classList.remove(BOOT_CLASS);
   }
 
@@ -201,6 +210,7 @@
       for (const scope of collectRoots(document)) {
         adoptShadowStyles(scope);
         applyStateBatch(scope.querySelectorAll(MEDIA_SELECTOR));
+        queueDeepScan(collectElements(scope));
       }
       refreshHover();
       return;
@@ -274,6 +284,12 @@
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === "attributes") {
+        // A style change can introduce a background we previously ruled out,
+        // so let the deep scan look at this element again.
+        if (mutation.attributeName === "style") {
+          deepScanned.delete(mutation.target);
+          queueDeepScan([mutation.target]);
+        }
         enqueue(mutation.target);
         continue;
       }
@@ -285,6 +301,8 @@
         if (node.querySelectorAll) {
           node.querySelectorAll(MEDIA_SELECTOR).forEach(enqueue);
         }
+        queueDeepScan([node]);
+        if (node.querySelectorAll) queueDeepScan(collectElements(node));
 
         // New subtrees can bring new web components with them.
         if (node.shadowRoot || (node.querySelector && node.querySelector("*"))) {
@@ -393,6 +411,125 @@
     if (pointerX >= 0) scheduleHover();
   }
 
+  // ── Deep scan ─────────────────────────────────────────────────────────────
+  //
+  // The cheap path only sees inline background images. Plenty of feeds set
+  // theirs from a stylesheet class instead, which is invisible without asking
+  // the browser for computed styles. That is expensive, so it happens in idle
+  // time, in bounded chunks, and each element is asked about only once.
+
+  const requestIdle =
+    typeof window.requestIdleCallback === "function"
+      ? window.requestIdleCallback.bind(window)
+      : (fn) => setTimeout(() => fn({ timeRemaining: () => 8 }), 50);
+
+  function queueDeepScan(elements) {
+    if (!config.deepScan) return;
+    for (const el of elements) {
+      if (el && el.nodeType === Node.ELEMENT_NODE && !deepScanned.has(el)) {
+        deepScanQueue.add(el);
+      }
+    }
+    scheduleDeepScan();
+  }
+
+  function scheduleDeepScan() {
+    if (deepScanHandle || !deepScanQueue.size) return;
+    if (!active || !config.deepScan) return;
+    deepScanHandle = requestIdle(runDeepScan, { timeout: 2000 });
+  }
+
+  function runDeepScan() {
+    deepScanHandle = 0;
+    if (!active || !config.deepScan) {
+      deepScanQueue.clear();
+      return;
+    }
+
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const found = [];
+    let examined = 0;
+
+    for (const el of deepScanQueue) {
+      deepScanQueue.delete(el);
+      if (examined >= Media.DEEP_SCAN_BATCH) break;
+      examined += 1;
+
+      if (deepScanned.has(el)) continue;
+      deepScanned.add(el);
+      if (!el.isConnected) continue;
+      if (!Media.isDeepScanCandidate(el)) continue;
+
+      const rect = measure(el);
+      if (Media.isTooSmall(rect)) continue;
+      // A full-viewport element is the page's own backdrop. Blurring it would
+      // blur every word sitting on top of it.
+      if (Media.isPageBackground(rect, viewport)) continue;
+
+      let backgroundImage = "";
+      try {
+        backgroundImage = window.getComputedStyle(el).backgroundImage;
+      } catch {
+        continue;
+      }
+      if (!Media.hasComputedBackgroundImage(backgroundImage)) continue;
+
+      el.setAttribute(Media.BG_ATTR, "");
+      found.push(el);
+    }
+
+    if (found.length) applyStateBatch(found);
+    // More to get through, so come back on the next idle slice.
+    if (deepScanQueue.size) scheduleDeepScan();
+  }
+
+  /** Every element under a root, for the deep scan to sift through. */
+  function collectElements(scope) {
+    try {
+      return scope.querySelectorAll("*");
+    } catch {
+      return [];
+    }
+  }
+
+  // ── Re-hiding when you look away ──────────────────────────────────────────
+
+  /**
+   * Put revealed media back behind the blur.
+   *
+   * A WeakSet cannot be enumerated, so the elements are found by the state
+   * they are already carrying, and the set is replaced rather than emptied.
+   */
+  function rehideRevealed() {
+    if (!active) return;
+    revealed = new WeakSet();
+    setHover(null);
+    for (const scope of collectRoots(document)) {
+      const stale = scope.querySelectorAll(`[${STATE_ATTR}="${STATE.REVEALED}"]`);
+      if (stale.length) applyStateBatch(stale);
+    }
+  }
+
+  function onWindowBlur() {
+    onPointerLeave();
+    if (config.rehideOnBlur) rehideRevealed();
+  }
+
+  function onVisibilityChange() {
+    if (document.visibilityState === "hidden" && config.rehideOnBlur) {
+      onPointerLeave();
+      rehideRevealed();
+    }
+  }
+
+  /** Any sign of life restarts the idle countdown. */
+  function noteActivity() {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = 0;
+    if (!active || !config.rehideAfterSeconds) return;
+    idleTimer = setTimeout(rehideRevealed, config.rehideAfterSeconds * 1000);
+  }
+
   // ── Settings ──────────────────────────────────────────────────────────────
 
   /**
@@ -418,9 +555,16 @@
   }
 
   function adopt(nextConfig) {
+    const previous = config;
     config = Config.normalizeConfig(nextConfig);
     active = Config.shouldBlurUrl(effectiveUrl(), config);
     settingsLoaded = true;
+
+    // Turning the deep scan back on has to forget every earlier "no", or
+    // nothing would ever be re-examined.
+    if (config.deepScan && !previous.deepScan) deepScanned = new WeakSet();
+
+    noteActivity();
     scheduleFullScan();
   }
 
@@ -462,7 +606,13 @@
   document.addEventListener("pointermove", onPointerMove, { passive: true, capture: true });
   document.addEventListener("pointerleave", onPointerLeave, { passive: true, capture: true });
   window.addEventListener("scroll", onScroll, { passive: true, capture: true });
-  window.addEventListener("blur", onPointerLeave, { passive: true });
+  window.addEventListener("blur", onWindowBlur, { passive: true });
+  document.addEventListener("visibilitychange", onVisibilityChange, { passive: true });
+
+  // Activity that resets the idle countdown.
+  for (const type of ["pointermove", "pointerdown", "keydown", "wheel"]) {
+    document.addEventListener(type, noteActivity, { passive: true, capture: true });
+  }
 
   // Late arrivals: images parsed after document_start, and anything the page
   // only paints once it is fully loaded.

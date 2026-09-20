@@ -29,6 +29,11 @@
   const MAX_BLUR_RADIUS = 60;
   const DEFAULT_BLUR_RADIUS = 18;
 
+  /** Idle re-hide delay, in seconds. Zero means never. */
+  const MIN_REHIDE_SECONDS = 0;
+  const MAX_REHIDE_SECONDS = 3600;
+  const DEFAULT_REHIDE_SECONDS = 60;
+
   /**
    * Defaults. A fresh install blurs everywhere, because a privacy tool that
    * does nothing until you configure it is a privacy tool that fails quietly.
@@ -41,6 +46,13 @@
     keepRevealed: false,
     lockBlur: false,
     blurRadius: DEFAULT_BLUR_RADIUS,
+    // Re-hide anything already revealed when you look away. Cheap insurance,
+    // and it only ever affects media you had chosen to reveal.
+    rehideOnBlur: true,
+    rehideAfterSeconds: DEFAULT_REHIDE_SECONDS,
+    // Detect background images applied by a stylesheet, not just inline.
+    // Costs a scan of the page, so it is here as an escape hatch.
+    deepScan: true,
   });
 
   const KEYS = Object.freeze(Object.keys(DEFAULTS));
@@ -67,6 +79,12 @@
     const n = Number(value);
     if (!Number.isFinite(n)) return DEFAULT_BLUR_RADIUS;
     return Math.min(MAX_BLUR_RADIUS, Math.max(MIN_BLUR_RADIUS, Math.round(n)));
+  }
+
+  function clampRehideSeconds(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return DEFAULT_REHIDE_SECONDS;
+    return Math.min(MAX_REHIDE_SECONDS, Math.max(MIN_REHIDE_SECONDS, Math.round(n)));
   }
 
   // ── Domains ───────────────────────────────────────────────────────────────
@@ -194,6 +212,29 @@
     return shouldBlurHost(parsed.hostname, config);
   }
 
+  /**
+   * Add or remove a host from a domain list, for the popup's per-site switch.
+   *
+   * Removing has to drop every entry the host matches, not just an exact one.
+   * With "reddit.com" listed, turning the switch off on old.reddit.com has to
+   * remove the parent entry, or the switch would flip straight back on.
+   *
+   * @param {unknown} domains current list
+   * @param {unknown} host hostname to add or remove
+   * @param {boolean} shouldBlur desired state for this host
+   * @returns {string[]} the new list
+   */
+  function setHostInDomains(domains, host, shouldBlur) {
+    const list = parseDomainList(domains);
+    const target = normalizeDomain(host);
+    if (!target) return list;
+
+    if (shouldBlur) {
+      return list.some((d) => hostMatchesDomain(target, d)) ? list : list.concat(target);
+    }
+    return list.filter((d) => !hostMatchesDomain(target, d));
+  }
+
   // ── Whole-config handling ─────────────────────────────────────────────────
 
   /**
@@ -223,6 +264,13 @@
       blurRadius: clampBlurRadius(
         pick("blurRadius") === undefined ? DEFAULTS.blurRadius : pick("blurRadius"),
       ),
+      rehideOnBlur: toBool(pick("rehideOnBlur"), DEFAULTS.rehideOnBlur),
+      rehideAfterSeconds: clampRehideSeconds(
+        pick("rehideAfterSeconds") === undefined
+          ? DEFAULTS.rehideAfterSeconds
+          : pick("rehideAfterSeconds"),
+      ),
+      deepScan: toBool(pick("deepScan"), DEFAULTS.deepScan),
     };
   }
 
@@ -320,7 +368,12 @@
     MIN_BLUR_RADIUS,
     MAX_BLUR_RADIUS,
     DEFAULT_BLUR_RADIUS,
+    MIN_REHIDE_SECONDS,
+    MAX_REHIDE_SECONDS,
+    DEFAULT_REHIDE_SECONDS,
     clampBlurRadius,
+    clampRehideSeconds,
+    setHostInDomains,
     normalizeDomain,
     parseDomainList,
     formatDomainList,

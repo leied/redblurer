@@ -1,0 +1,817 @@
+/*
+ * ui/m3.css — the Material 3 design system, shared by the popup and options.
+ *
+ * Built on M3 system tokens rather than one-off values: a red tonal palette
+ * supplies the primary family, a warm neutral supplies the surfaces, and
+ * every component below reads from those roles. Light and dark come from the
+ * same token names, so nothing downstream needs a second code path.
+ *
+ * Page layout lives in popup.css and options.css. Only tokens and components
+ * belong here, so the two surfaces cannot drift apart.
+ *
+ * No webfont is loaded. The previous build requested "Google Sans" from
+ * Google Fonts, which is not served publicly, so the request failed and the
+ * popup fell back to a system font anyway while still announcing itself to
+ * Google on every open. Roboto is present on most platforms; the stack
+ * degrades cleanly where it is not.
+ */
+
+/* ── System tokens ──────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light dark;
+
+  /* Colour roles — light */
+  --md-sys-color-primary: #ba1a1a;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #ffdad6;
+  --md-sys-color-on-primary-container: #410002;
+
+  --md-sys-color-secondary-container: #ffdad6;
+  --md-sys-color-on-secondary-container: #410002;
+
+  --md-sys-color-surface: #fff8f7;
+  --md-sys-color-on-surface: #201a1a;
+  --md-sys-color-on-surface-variant: #534341;
+
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #fff0ef;
+  --md-sys-color-surface-container: #fceae8;
+  --md-sys-color-surface-container-high: #f7e4e2;
+  --md-sys-color-surface-container-highest: #f1dedd;
+
+  --md-sys-color-outline: #857371;
+  --md-sys-color-outline-variant: #d8c2be;
+
+  --md-sys-color-inverse-surface: #362f2e;
+  --md-sys-color-inverse-on-surface: #fbeeec;
+  --md-sys-color-inverse-primary: #ffb4ab;
+
+  --md-sys-color-error: #ba1a1a;
+
+  /* Shape */
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 9999px;
+
+  /* Elevation */
+  --md-sys-elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --md-sys-elevation-2: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --md-sys-elevation-3: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+
+  /* State layer opacities */
+  --md-sys-state-hover: 0.08;
+  --md-sys-state-focus: 0.1;
+  --md-sys-state-pressed: 0.1;
+
+  /* Motion */
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-duration-short-4: 200ms;
+  --md-sys-motion-duration-medium-2: 300ms;
+
+  /* Typography */
+  --md-sys-typescale-font: Roboto, "Roboto Flex", system-ui, -apple-system,
+    "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --md-sys-color-primary: #ffb4ab;
+    --md-sys-color-on-primary: #690005;
+    --md-sys-color-primary-container: #93000a;
+    --md-sys-color-on-primary-container: #ffdad6;
+
+    --md-sys-color-secondary-container: #5d3f3c;
+    --md-sys-color-on-secondary-container: #ffdad6;
+
+    --md-sys-color-surface: #181211;
+    --md-sys-color-on-surface: #f1dedd;
+    --md-sys-color-on-surface-variant: #d8c2be;
+
+    --md-sys-color-surface-container-lowest: #0f0a0a;
+    --md-sys-color-surface-container-low: #201a19;
+    --md-sys-color-surface-container: #251918;
+    --md-sys-color-surface-container-high: #2f2423;
+    --md-sys-color-surface-container-highest: #3b2e2e;
+
+    --md-sys-color-outline: #a08c8a;
+    --md-sys-color-outline-variant: #534341;
+
+    --md-sys-color-inverse-surface: #f1dedd;
+    --md-sys-color-inverse-on-surface: #362f2e;
+    --md-sys-color-inverse-primary: #ba1a1a;
+
+    --md-sys-color-error: #ffb4ab;
+  }
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-typescale-font);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* M3 focus indicator: a 3dp ring, offset so it never sits on the component. */
+:focus-visible {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Top app bar (small) ────────────────────────────────────────────────── */
+.top-app-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  padding: 0 16px;
+  background: var(--md-sys-color-surface);
+}
+
+.top-app-bar__leading {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+/* title-large */
+.top-app-bar__title {
+  flex: 1;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* label-small */
+.badge {
+  padding: 4px 8px;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+/* ── Hero: the one switch that matters ──────────────────────────────────── */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 88px;
+  padding: 16px 20px;
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  transition:
+    background-color var(--md-sys-motion-duration-medium-2) var(--md-sys-motion-easing-emphasized),
+    color var(--md-sys-motion-duration-medium-2) var(--md-sys-motion-easing-emphasized);
+}
+
+.hero.is-off {
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.hero__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* title-medium */
+.hero__headline {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: 0.15px;
+}
+
+/* body-medium */
+.hero__supporting {
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0.25px;
+  opacity: 0.9;
+}
+
+/* ── Cards (filled) ─────────────────────────────────────────────────────── */
+.card {
+  padding: 8px 4px 12px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+/* title-small */
+.card__title {
+  padding: 8px 16px;
+  color: var(--md-sys-color-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+}
+
+/* ── List items ─────────────────────────────────────────────────────────── */
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 16px;
+}
+
+.list-item--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.list-item__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* body-large */
+.list-item__headline {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  letter-spacing: 0.15px;
+  color: var(--md-sys-color-on-surface);
+}
+
+/* body-medium */
+.list-item__supporting {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0.25px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.list-item.is-disabled .list-item__headline,
+.list-item.is-disabled .list-item__supporting {
+  color: var(--md-sys-color-on-surface);
+  opacity: 0.38;
+}
+
+/* ── Switch ─────────────────────────────────────────────────────────────── */
+/* M3 geometry: 52x32 track, 24dp handle (the icon-bearing variant),
+   28dp while pressed, 40dp state layer. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 32px;
+}
+
+.switch__input {
+  position: absolute;
+  inset: -8px;          /* pads the hit area out to the 48dp minimum */
+  width: 68px;
+  height: 48px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.switch__input:disabled {
+  cursor: default;
+}
+
+.switch__track {
+  display: block;
+  width: 52px;
+  height: 32px;
+  border: 2px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-surface-container-highest);
+  transition:
+    background-color var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard),
+    border-color var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.switch__handle-container {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  display: grid;
+  place-items: center;
+  transform: translate(0, -50%);
+  transition: transform var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-emphasized);
+}
+
+.switch__state-layer {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-on-surface);
+  opacity: 0;
+  transition: opacity var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.switch__handle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-outline);
+  color: var(--md-sys-color-surface-container-highest);
+  transition:
+    width var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-emphasized),
+    height var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-emphasized),
+    background-color var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard),
+    color var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.switch__icon {
+  position: absolute;
+  transition: opacity var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.switch__icon--on {
+  opacity: 0;
+}
+
+/* Selected */
+.switch__input:checked ~ .switch__track {
+  background: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
+}
+
+.switch__input:checked ~ .switch__track .switch__handle-container {
+  transform: translate(20px, -50%);
+}
+
+.switch__input:checked ~ .switch__track .switch__handle {
+  background: var(--md-sys-color-on-primary);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.switch__input:checked ~ .switch__track .switch__icon--on {
+  opacity: 1;
+}
+
+.switch__input:checked ~ .switch__track .switch__icon--off {
+  opacity: 0;
+}
+
+/* State layers */
+.switch__input:hover:not(:disabled) ~ .switch__track .switch__state-layer {
+  opacity: var(--md-sys-state-hover);
+}
+
+.switch__input:focus-visible ~ .switch__track .switch__state-layer {
+  opacity: var(--md-sys-state-focus);
+}
+
+.switch__input:active:not(:disabled) ~ .switch__track .switch__state-layer {
+  opacity: var(--md-sys-state-pressed);
+}
+
+.switch__input:checked ~ .switch__track .switch__state-layer {
+  background: var(--md-sys-color-primary);
+}
+
+/* Pressed handle grows to 28dp */
+.switch__input:active:not(:disabled) ~ .switch__track .switch__handle {
+  width: 28px;
+  height: 28px;
+}
+
+/* Focus ring belongs on the track, not the invisible input */
+.switch__input:focus-visible {
+  outline: none;
+}
+
+.switch__input:focus-visible ~ .switch__track {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+/* Disabled */
+.switch__input:disabled ~ .switch__track {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-highest) 12%, transparent);
+  border-color: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+}
+
+.switch__input:disabled ~ .switch__track .switch__handle {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 38%, transparent);
+}
+
+.switch__input:disabled:checked ~ .switch__track {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+  border-color: transparent;
+}
+
+.switch__input:disabled:checked ~ .switch__track .switch__handle {
+  background: var(--md-sys-color-surface);
+  color: color-mix(in srgb, var(--md-sys-color-on-surface) 38%, transparent);
+}
+
+/* On the hero the switch sits on a coloured surface, so it uses the
+   container's own roles to keep contrast. */
+.hero .switch__input:checked ~ .switch__track {
+  background: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
+}
+
+/* ── Slider ─────────────────────────────────────────────────────────────── */
+.slider {
+  width: 100%;
+  height: 40px;              /* keeps the 48dp-ish target without a tall track */
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--md-sys-color-primary) 0 var(--slider-progress, 0%),
+    var(--md-sys-color-surface-container-highest) var(--slider-progress, 0%) 100%
+  );
+}
+
+.slider::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;          /* centres the 20dp handle on the 4dp track */
+  border: none;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  box-shadow: var(--md-sys-elevation-1);
+  appearance: none;
+  transition: box-shadow var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+/* The ring is the M3 state layer, drawn where a pseudo-element cannot reach. */
+.slider:hover::-webkit-slider-thumb {
+  box-shadow:
+    var(--md-sys-elevation-1),
+    0 0 0 10px color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+}
+
+.slider:focus-visible {
+  outline: none;
+}
+
+.slider:focus-visible::-webkit-slider-thumb,
+.slider:active::-webkit-slider-thumb {
+  box-shadow:
+    var(--md-sys-elevation-1),
+    0 0 0 10px color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
+}
+
+/* ── Outlined text field ────────────────────────────────────────────────── */
+.field {
+  padding: 4px 16px 0;
+}
+
+.text-field {
+  position: relative;
+}
+
+.text-field__input {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: 0.5px;
+  resize: vertical;
+  transition: border-color var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.text-field__input:hover {
+  border-color: var(--md-sys-color-on-surface);
+}
+
+.text-field__input:focus {
+  border-color: var(--md-sys-color-primary);
+  border-width: 2px;
+  padding: 15px;             /* compensates for the thicker border */
+  outline: none;
+}
+
+/* body-large at rest, body-small floated: the label rides up into a gap it
+   cuts in the outline, which is what makes this the outlined variant. */
+.text-field__label {
+  position: absolute;
+  top: 16px;
+  left: 12px;
+  padding: 0 4px;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  transition:
+    top var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard),
+    font-size var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard),
+    color var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.text-field__input:focus ~ .text-field__label,
+.text-field__input:not(:placeholder-shown) ~ .text-field__label {
+  top: -8px;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+}
+
+.text-field__input:focus ~ .text-field__label {
+  color: var(--md-sys-color-primary);
+}
+
+/* body-small */
+.supporting-text {
+  padding: 4px 16px 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+}
+
+.field.is-disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+/* label-large */
+.button {
+  position: relative;
+  flex: 1;
+  height: 40px;
+  padding: 0 24px;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-full);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+/* The state layer M3 puts over every button surface. */
+.button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.button:hover::before {
+  opacity: var(--md-sys-state-hover);
+}
+
+.button:focus-visible::before {
+  opacity: var(--md-sys-state-focus);
+}
+
+.button:active::before {
+  opacity: var(--md-sys-state-pressed);
+}
+
+.button--tonal {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.button--outlined {
+  background: transparent;
+  color: var(--md-sys-color-primary);
+  border: 1px solid var(--md-sys-color-outline);
+}
+
+/* body-small, centred */
+.footnote {
+  padding-top: 4px;
+  text-align: center;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+}
+
+/* ── Snackbar ───────────────────────────────────────────────────────────── */
+.snackbar {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: var(--md-sys-color-inverse-surface);
+  color: var(--md-sys-color-inverse-on-surface);
+  box-shadow: var(--md-sys-elevation-3);
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.25px;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition:
+    opacity var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard),
+    transform var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-emphasized);
+}
+
+.snackbar.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Errors read against the inverted surface, so they use inverse-primary
+   rather than the error role, which is tuned for the normal surface. */
+.snackbar.is-error {
+  color: var(--md-sys-color-inverse-primary);
+}
+
+/* ── Motion preference ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}
+
+/* ── Outlined select ────────────────────────────────────────────────────── */
+/* Same anatomy as the text field, for choosing from a fixed set. */
+.select {
+  position: relative;
+  display: block;
+}
+
+.select__input {
+  width: 100%;
+  height: 56px;
+  padding: 0 44px 0 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: 0.5px;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.select__input:hover {
+  border-color: var(--md-sys-color-on-surface);
+}
+
+.select__input:focus {
+  border-color: var(--md-sys-color-primary);
+  border-width: 2px;
+  padding-left: 15px;
+  outline: none;
+}
+
+/* The trailing chevron M3 puts on a menu field. */
+.select::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--md-sys-color-on-surface-variant);
+  border-bottom: 2px solid var(--md-sys-color-on-surface-variant);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.select__label {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  padding: 0 4px;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+  pointer-events: none;
+}
+
+.select__input:focus ~ .select__label {
+  color: var(--md-sys-color-primary);
+}
+
+/* ── Icon button ────────────────────────────────────────────────────────── */
+.icon-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.icon-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--md-sys-motion-duration-short-4) var(--md-sys-motion-easing-standard);
+}
+
+.icon-button:hover::before {
+  opacity: var(--md-sys-state-hover);
+}
+
+.icon-button:focus-visible::before {
+  opacity: var(--md-sys-state-focus);
+}
+
+.icon-button:active::before {
+  opacity: var(--md-sys-state-pressed);
+}
+
+/* ── Keyboard shortcut chip ─────────────────────────────────────────────── */
+kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}

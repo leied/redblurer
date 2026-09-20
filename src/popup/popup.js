@@ -1,222 +1,130 @@
 /**
- * popup/popup.js — settings UI.
+ * popup/popup.js — the controls you reach for in a hurry.
  *
- * Reads and writes chrome.storage.sync directly. Content scripts pick the
- * change up through chrome.storage.onChanged, so there is no message round
- * trip and no second copy of the state to drift out of sync.
+ * Deliberately narrow: the global switch, a hold-everything switch, and a
+ * per-site switch for the tab you are looking at. Everything else lives on
+ * the options page.
  */
 (function () {
   "use strict";
 
   const Config = globalThis.RedBlurerConfig;
+  const Store = globalThis.RedBlurerStore;
 
   const el = {
     hero: document.getElementById("hero"),
-    statusHeadline: document.getElementById("status-headline"),
-    statusSupporting: document.getElementById("status-supporting"),
+    headline: document.getElementById("enabled-label"),
+    supporting: document.getElementById("enabled-desc"),
     version: document.getElementById("version-badge"),
     enabled: document.getElementById("enabled"),
     lockBlur: document.getElementById("lockBlur"),
-    keepRevealed: document.getElementById("keepRevealed"),
-    keepRevealedItem: document.getElementById("keepRevealed-item"),
-    blurRadius: document.getElementById("blurRadius"),
-    radiusValue: document.getElementById("radius-value"),
-    blurEverywhere: document.getElementById("blurEverywhere"),
-    domains: document.getElementById("domains"),
-    domainsField: document.getElementById("domains-field"),
-    exportBtn: document.getElementById("export"),
-    importBtn: document.getElementById("import"),
-    importFile: document.getElementById("import-file"),
+    blurThisSite: document.getElementById("blurThisSite"),
+    blurThisSiteItem: document.getElementById("blurThisSite-item"),
+    blurThisSiteLabel: document.getElementById("blurThisSite-label"),
+    blurThisSiteDesc: document.getElementById("blurThisSite-desc"),
+    openOptions: document.getElementById("open-options"),
+    shortcutPanic: document.getElementById("shortcut-panic"),
     snackbar: document.getElementById("snackbar"),
   };
 
-  let config = Config.normalizeConfig(null);
-  let snackbarTimer = 0;
+  const notify = Store.snackbar(el.snackbar);
 
-  // ── Storage ───────────────────────────────────────────────────────────────
+  /** Hostname of the tab underneath, or "" when it is not a web page. */
+  let host = "";
+  let hostKnown = false;
 
-  function load() {
-    chrome.storage.sync.get(null, (stored) => {
-      void chrome.runtime.lastError;
-      config = Config.normalizeConfig(stored);
-      render();
-    });
-  }
+  const store = Store.create({ onChange: render });
 
-  /** Persist a partial change. Everything in the UI funnels through here. */
+  /** Save, and speak up if storage refused. */
   function save(patch) {
-    config = Config.mergeConfig(config, patch);
-    chrome.storage.sync.set(patch, () => {
-      const err = chrome.runtime.lastError;
-      if (err) showSnackbar("Could not save. Storage may be full.", true);
+    store.save(patch, (error) => {
+      if (error) notify("Could not save that. " + error, true);
     });
-    render();
   }
-
-  // ── Rendering ─────────────────────────────────────────────────────────────
 
   function render() {
+    const config = store.get();
+
     el.enabled.checked = config.enabled;
     el.lockBlur.checked = config.lockBlur;
-    el.keepRevealed.checked = config.keepRevealed;
-    el.blurEverywhere.checked = config.blurEverywhere;
-    el.blurRadius.value = String(config.blurRadius);
+    el.lockBlur.disabled = !config.enabled;
 
     el.hero.classList.toggle("is-off", !config.enabled);
-    el.statusHeadline.textContent = config.enabled ? "Blur active" : "Blur off";
-    el.statusSupporting.textContent = config.enabled
-      ? describeScope()
+    el.headline.textContent = config.enabled ? "Blur active" : "Blur off";
+    el.supporting.textContent = config.enabled
+      ? "Images and videos are hidden"
       : "Media is fully visible";
 
-    renderRadius(config.blurRadius);
+    renderSite(config);
+  }
 
-    // "Keep media unblurred" cannot do anything while the blur is locked, so
-    // say so by disabling it rather than leaving a switch that does nothing.
-    const keepDisabled = config.lockBlur || !config.enabled;
-    el.keepRevealed.disabled = keepDisabled;
-    el.keepRevealedItem.classList.toggle("is-disabled", keepDisabled);
-
-    el.lockBlur.disabled = !config.enabled;
-    el.blurRadius.disabled = !config.enabled;
-    el.blurEverywhere.disabled = !config.enabled;
-
-    // The domain list is only consulted when blur-everywhere is off.
-    const domainsDisabled = config.blurEverywhere || !config.enabled;
-    el.domainsField.classList.toggle("is-disabled", domainsDisabled);
-    el.domains.disabled = domainsDisabled;
-
-    // Never stomp what the user is mid-way through typing.
-    if (document.activeElement !== el.domains) {
-      el.domains.value = Config.formatDomainList(config.domains);
+  /**
+   * The per-site switch. It reflects whether the current host would actually
+   * be blurred, which is not the same as whether it appears in the list: a
+   * parent domain can cover it.
+   */
+  function renderSite(config) {
+    if (!hostKnown) {
+      el.blurThisSite.disabled = true;
+      el.blurThisSiteDesc.textContent = "Checking the current tab…";
+      return;
     }
-  }
 
-  function describeScope() {
-    if (config.blurEverywhere) return "Images and videos are hidden everywhere";
-    const n = config.domains.length;
-    if (n === 0) return "No domains listed, so nothing is being blurred";
-    return n === 1 ? "Hidden on 1 listed domain" : `Hidden on ${n} listed domains`;
-  }
+    if (!host) {
+      el.blurThisSite.checked = false;
+      el.blurThisSite.disabled = true;
+      el.blurThisSiteItem.classList.add("is-disabled");
+      el.blurThisSiteLabel.textContent = "Blur this site";
+      el.blurThisSiteDesc.textContent = "This tab is not an ordinary web page";
+      return;
+    }
 
-  function renderRadius(value) {
-    el.radiusValue.textContent = `${value} pixels`;
-    el.blurRadius.setAttribute("aria-valuetext", `${value} pixels`);
-    const min = Number(el.blurRadius.min);
-    const max = Number(el.blurRadius.max);
-    const pct = ((value - min) / (max - min)) * 100;
-    el.blurRadius.style.setProperty("--slider-progress", `${pct}%`);
-  }
+    el.blurThisSiteLabel.textContent = "Blur " + host;
 
-  // ── Snackbar ──────────────────────────────────────────────────────────────
+    if (config.blurEverywhere) {
+      // The switch would have nothing to act on, so say why rather than
+      // offering a control that silently does nothing.
+      el.blurThisSite.checked = true;
+      el.blurThisSite.disabled = true;
+      el.blurThisSiteItem.classList.add("is-disabled");
+      el.blurThisSiteDesc.textContent = "Blurring on every site is on";
+      return;
+    }
 
-  function showSnackbar(message, isError) {
-    el.snackbar.textContent = message;
-    el.snackbar.classList.toggle("is-error", Boolean(isError));
-    el.snackbar.classList.add("is-open");
-    clearTimeout(snackbarTimer);
-    snackbarTimer = setTimeout(() => {
-      el.snackbar.classList.remove("is-open");
-    }, 4000);
+    const covered = Config.shouldBlurHost(host, { ...config, enabled: true });
+    el.blurThisSite.checked = covered;
+    el.blurThisSite.disabled = !config.enabled;
+    el.blurThisSiteItem.classList.toggle("is-disabled", !config.enabled);
+    el.blurThisSiteDesc.textContent = covered
+      ? "On your domain list"
+      : "Not on your domain list";
   }
 
   // ── Bindings ──────────────────────────────────────────────────────────────
 
-  el.enabled.addEventListener("change", () => save({ enabled: el.enabled.checked }));
-  el.lockBlur.addEventListener("change", () => save({ lockBlur: el.lockBlur.checked }));
-  el.keepRevealed.addEventListener("change", () =>
-    save({ keepRevealed: el.keepRevealed.checked }),
-  );
-  el.blurEverywhere.addEventListener("change", () =>
-    save({ blurEverywhere: el.blurEverywhere.checked }),
-  );
-
-  // Track the handle live, but only write once the drag settles.
-  let radiusTimer = 0;
-  el.blurRadius.addEventListener("input", () => {
-    const value = Config.clampBlurRadius(el.blurRadius.value);
-    renderRadius(value);
-    clearTimeout(radiusTimer);
-    radiusTimer = setTimeout(() => save({ blurRadius: value }), 150);
+  el.enabled.addEventListener("change", () => {
+    save({ enabled: el.enabled.checked });
   });
 
-  /**
-   * Normalize what was typed, store it, and show it back cleaned up. Telling
-   * the user an entry was dropped beats silently discarding it.
-   */
-  function commitDomains() {
-    const typed = el.domains.value;
-    const parsed = Config.parseDomainList(typed);
-    const typedCount = typed.split(/[\s,;]+/).filter(Boolean).length;
+  el.lockBlur.addEventListener("change", () => {
+    save({ lockBlur: el.lockBlur.checked });
+  });
 
-    save({ domains: parsed });
-    el.domains.value = Config.formatDomainList(parsed);
+  el.blurThisSite.addEventListener("change", () => {
+    if (!host) return;
+    const domains = Config.setHostInDomains(
+      store.get().domains,
+      host,
+      el.blurThisSite.checked,
+    );
+    save({ domains });
+  });
 
-    const dropped = typedCount - parsed.length;
-    if (dropped > 0) {
-      showSnackbar(
-        dropped === 1
-          ? "Skipped 1 entry that is not a valid domain"
-          : `Skipped ${dropped} entries that are not valid domains`,
-        true,
-      );
+  el.openOptions.addEventListener("click", () => {
+    if (chrome.runtime.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+      window.close();
     }
-  }
-
-  el.domains.addEventListener("blur", commitDomains);
-
-  // ── Export ────────────────────────────────────────────────────────────────
-
-  el.exportBtn.addEventListener("click", () => {
-    const blob = new Blob([Config.serializeExport(config)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "redblurer-config.json";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    // Give the download a tick to start before the blob is torn down.
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showSnackbar("Settings exported");
-  });
-
-  // ── Import ────────────────────────────────────────────────────────────────
-
-  el.importBtn.addEventListener("click", () => el.importFile.click());
-
-  el.importFile.addEventListener("change", () => {
-    const file = el.importFile.files && el.importFile.files[0];
-    el.importFile.value = "";
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onerror = () => showSnackbar("Could not read that file", true);
-    reader.onload = () => {
-      const result = Config.parseImport(String(reader.result));
-      if (!result.ok) {
-        showSnackbar(result.error, true);
-        return;
-      }
-      config = result.config;
-      chrome.storage.sync.set(config, () => {
-        void chrome.runtime.lastError;
-        render();
-        showSnackbar("Settings imported");
-      });
-    };
-    reader.readAsText(file);
-  });
-
-  // ── Stay in sync ──────────────────────────────────────────────────────────
-
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "sync") return;
-    const next = { ...config };
-    for (const [key, change] of Object.entries(changes)) next[key] = change.newValue;
-    config = Config.normalizeConfig(next);
-    render();
   });
 
   // ── Start ─────────────────────────────────────────────────────────────────
@@ -227,5 +135,23 @@
     el.version.textContent = "";
   }
 
-  load();
+  // Show the shortcut the user actually has bound, which may not be ours.
+  try {
+    chrome.commands.getAll((commands) => {
+      void chrome.runtime.lastError;
+      const panic = (commands || []).find((c) => c.name === "panic");
+      if (panic && panic.shortcut) el.shortcutPanic.textContent = panic.shortcut;
+      else el.shortcutPanic.textContent = "No shortcut set";
+    });
+  } catch {
+    /* commands API unavailable */
+  }
+
+  Store.activeHost((found) => {
+    host = found;
+    hostKnown = true;
+    render();
+  });
+
+  store.start();
 })();

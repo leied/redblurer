@@ -1,7 +1,8 @@
 /**
- * The popup, exercised against a real DOM and a stubbed chrome.storage.
+ * The toolbar popup: the handful of controls you reach for in a hurry.
  */
 const nodeTest = require("node:test");
+const assert = require("node:assert/strict");
 
 // The pure tests run with no dependencies at all. These need a DOM, so they
 // step aside rather than fail when jsdom has not been installed.
@@ -14,253 +15,181 @@ const missing = (() => {
   }
 })();
 const test = missing ? (name) => nodeTest(name, { skip: missing }, () => {}) : nodeTest;
-const assert = require("node:assert/strict");
+
 const { loadPopup, dispatch } = missing
   ? {}
   : require("../tools/dom-harness.js");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Values built inside the jsdom window carry that realm's prototypes, which
- * strict deep-equality treats as a difference. Re-wrap before comparing.
- */
+/** Values built inside jsdom carry that realm's prototypes; re-wrap to compare. */
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-/** Hand the file input a file and tell the popup about it. */
-function chooseFile(env, text, name = "redblurer-config.json") {
-  const input = env.document.getElementById("import-file");
-  const file = new env.window.File([text], name, { type: "application/json" });
-  Object.defineProperty(input, "files", { value: [file], configurable: true });
-  dispatch(input, "change");
+/** The popup asks for the active tab asynchronously, so let that land. */
+async function open(options) {
+  const env = await loadPopup(options);
+  await wait(20);
+  return env;
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
 
 test("the popup shows the settings that are stored", async () => {
-  const env = await loadPopup({
-    stored: {
-      enabled: true,
-      blurEverywhere: false,
-      domains: ["x.com", "reddit.com"],
-      keepRevealed: true,
-      lockBlur: false,
-      blurRadius: 30,
-    },
-  });
-  const $ = (id) => env.document.getElementById(id);
-
-  assert.equal($("enabled").checked, true);
-  assert.equal($("blurEverywhere").checked, false);
-  assert.equal($("keepRevealed").checked, true);
-  assert.equal($("lockBlur").checked, false);
-  assert.equal($("blurRadius").value, "30");
-  assert.equal($("domains").value, "x.com\nreddit.com");
-  assert.equal($("radius-value").textContent, "30 pixels");
-});
-
-test("the popup shows settings saved by the previous version", async () => {
-  const env = await loadPopup({
-    stored: { blurEnabled: false, blockAll: false, blockedDomains: ["twitter.com"] },
-  });
-  assert.equal(env.document.getElementById("enabled").checked, false);
-  assert.equal(env.document.getElementById("domains").value, "twitter.com");
+  const env = await open({ stored: { enabled: true, lockBlur: true } });
+  assert.equal(env.document.getElementById("enabled").checked, true);
+  assert.equal(env.document.getElementById("lockBlur").checked, true);
 });
 
 test("the version badge comes from the manifest, not a hardcoded string", async () => {
-  const env = await loadPopup();
+  const env = await open();
   const manifest = env.window.chrome.runtime.getManifest();
   assert.equal(env.document.getElementById("version-badge").textContent, "v" + manifest.version);
 });
 
 test("the headline says what is actually happening", async () => {
-  const on = await loadPopup({ stored: { enabled: true, blurEverywhere: true } });
-  assert.equal(on.document.getElementById("status-headline").textContent, "Blur active");
+  const on = await open({ stored: { enabled: true } });
+  assert.equal(on.document.getElementById("enabled-label").textContent, "Blur active");
   assert.equal(on.document.getElementById("hero").classList.contains("is-off"), false);
 
-  const off = await loadPopup({ stored: { enabled: false } });
-  assert.equal(off.document.getElementById("status-headline").textContent, "Blur off");
+  const off = await open({ stored: { enabled: false } });
+  assert.equal(off.document.getElementById("enabled-label").textContent, "Blur off");
   assert.ok(off.document.getElementById("hero").classList.contains("is-off"));
 });
 
-test("the popup admits when a domain list would blur nothing", async () => {
-  const env = await loadPopup({
+test("hold-everything is disabled while the extension is off", async () => {
+  const env = await open({ stored: { enabled: false } });
+  assert.equal(env.document.getElementById("lockBlur").disabled, true);
+});
+
+test("the popup stays small enough not to need scrolling", () => {
+  // Chrome caps a popup at 600px and scrolls past it. The long-form settings
+  // moved to the options page precisely so this one does not get there.
+  const html = require("../tools/dom-harness.js").readSrc("popup/popup.html");
+  assert.equal(/id="domains"/.test(html), false, "the domain list belongs on the options page");
+  assert.equal(/id="blurRadius"/.test(html), false, "the slider belongs on the options page");
+  assert.equal(/id="export"/.test(html), false, "backup belongs on the options page");
+});
+
+// ── The per-site switch ─────────────────────────────────────────────────────
+
+test("the per-site switch names the site you are on", async () => {
+  const env = await open({
     stored: { enabled: true, blurEverywhere: false, domains: [] },
+    activeTabUrl: "https://news.ycombinator.com/",
   });
-  assert.match(
-    env.document.getElementById("status-supporting").textContent,
-    /nothing is being blurred/i,
+  assert.equal(
+    env.document.getElementById("blurThisSite-label").textContent,
+    "Blur news.ycombinator.com",
   );
 });
 
-test("the popup counts the domains it will act on", async () => {
-  const one = await loadPopup({
-    stored: { enabled: true, blurEverywhere: false, domains: ["x.com"] },
+test("the per-site switch is on when a parent domain already covers the host", async () => {
+  // Listing reddit.com covers old.reddit.com, so the switch has to read as on
+  // even though that exact host is not in the list.
+  const env = await open({
+    stored: { enabled: true, blurEverywhere: false, domains: ["reddit.com"] },
+    activeTabUrl: "https://old.reddit.com/r/all",
   });
-  assert.match(one.document.getElementById("status-supporting").textContent, /1 listed domain\b/);
+  assert.equal(env.document.getElementById("blurThisSite").checked, true);
+});
 
-  const many = await loadPopup({
-    stored: { enabled: true, blurEverywhere: false, domains: ["x.com", "reddit.com"] },
+test("turning the per-site switch on adds the host", async () => {
+  const env = await open({
+    stored: { enabled: true, blurEverywhere: false, domains: [] },
+    activeTabUrl: "https://news.ycombinator.com/",
   });
-  assert.match(many.document.getElementById("status-supporting").textContent, /2 listed domains/);
+  const toggle = env.document.getElementById("blurThisSite");
+
+  toggle.checked = true;
+  dispatch(toggle, "change");
+
+  assert.deepEqual(plain(env.chrome.read().domains), ["news.ycombinator.com"]);
 });
 
-// ── Controls that cannot do anything are disabled ───────────────────────────
+test("turning it off removes the parent entry that was covering the host", async () => {
+  // Removing only the exact host would leave reddit.com listed, and the
+  // switch would flip straight back on.
+  const env = await open({
+    stored: { enabled: true, blurEverywhere: false, domains: ["reddit.com", "x.com"] },
+    activeTabUrl: "https://old.reddit.com/r/all",
+  });
+  const toggle = env.document.getElementById("blurThisSite");
 
-test("keep-unblurred is disabled while the blur is locked", async () => {
-  const env = await loadPopup({ stored: { enabled: true, lockBlur: true } });
-  assert.equal(env.document.getElementById("keepRevealed").disabled, true);
-  assert.ok(env.document.getElementById("keepRevealed-item").classList.contains("is-disabled"));
+  toggle.checked = false;
+  dispatch(toggle, "change");
+
+  assert.deepEqual(plain(env.chrome.read().domains), ["x.com"]);
 });
 
-test("the domain list is disabled while blurring everywhere", async () => {
-  const env = await loadPopup({ stored: { enabled: true, blurEverywhere: true } });
-  assert.equal(env.document.getElementById("domains").disabled, true);
-  assert.ok(env.document.getElementById("domains-field").classList.contains("is-disabled"));
+test("the per-site switch explains itself while blurring everywhere", async () => {
+  const env = await open({
+    stored: { enabled: true, blurEverywhere: true },
+    activeTabUrl: "https://example.com/",
+  });
+  assert.equal(env.document.getElementById("blurThisSite").disabled, true);
+  assert.match(
+    env.document.getElementById("blurThisSite-desc").textContent,
+    /every site/i,
+  );
 });
 
-test("turning the extension off disables the settings below it", async () => {
-  const env = await loadPopup({ stored: { enabled: false } });
-  for (const id of ["lockBlur", "keepRevealed", "blurEverywhere", "blurRadius", "domains"]) {
-    assert.equal(env.document.getElementById(id).disabled, true, `#${id} should be disabled`);
-  }
+test("the per-site switch stands down on a page it cannot act on", async () => {
+  const env = await open({
+    stored: { enabled: true, blurEverywhere: false },
+    activeTabUrl: "chrome://extensions",
+  });
+  assert.equal(env.document.getElementById("blurThisSite").disabled, true);
+  assert.match(
+    env.document.getElementById("blurThisSite-desc").textContent,
+    /not an ordinary web page/i,
+  );
 });
 
 // ── Writing ─────────────────────────────────────────────────────────────────
 
-test("flipping a switch saves it", async () => {
-  const env = await loadPopup({ stored: { enabled: true } });
+test("flipping the main switch saves it", async () => {
+  const env = await open({ stored: { enabled: true } });
   const toggle = env.document.getElementById("enabled");
 
   toggle.checked = false;
   dispatch(toggle, "change");
 
   assert.equal(env.chrome.read().enabled, false);
-  assert.equal(env.document.getElementById("status-headline").textContent, "Blur off");
+  assert.equal(env.document.getElementById("enabled-label").textContent, "Blur off");
 });
 
-test("each switch saves its own setting and nothing else", async () => {
-  const env = await loadPopup({ stored: { enabled: true, blurEverywhere: true } });
+test("hold-everything saves on its own without touching anything else", async () => {
+  const env = await open({ stored: { enabled: true, blurEverywhere: true } });
   const lock = env.document.getElementById("lockBlur");
 
   lock.checked = true;
   dispatch(lock, "change");
 
   assert.equal(env.chrome.read().lockBlur, true);
-  assert.equal(env.chrome.read().enabled, true, "unrelated settings should be untouched");
+  assert.equal(env.chrome.read().enabled, true);
   assert.equal(env.chrome.read().blurEverywhere, true);
 });
 
-test("the slider reports as it moves and saves once it settles", async () => {
-  const env = await loadPopup({ stored: { blurRadius: 18 } });
-  const slider = env.document.getElementById("blurRadius");
-
-  slider.value = "44";
-  dispatch(slider, "input");
-
-  assert.equal(env.document.getElementById("radius-value").textContent, "44 pixels");
-  assert.equal(slider.getAttribute("aria-valuetext"), "44 pixels");
-  assert.equal(env.chrome.read().blurRadius, 18, "should not save on every frame of a drag");
-
-  await wait(250);
-  assert.equal(env.chrome.read().blurRadius, 44);
-});
-
-test("the domain list is cleaned up when you leave the field", async () => {
-  const env = await loadPopup({ stored: { blurEverywhere: false, domains: [] } });
-  const domains = env.document.getElementById("domains");
-
-  domains.value = "https://WWW.X.com/home\nreddit.com\nx.com\n";
-  dispatch(domains, "blur");
-
-  assert.deepEqual(plain(env.chrome.read().domains), ["x.com", "reddit.com"]);
-  assert.equal(domains.value, "x.com\nreddit.com", "the field should show what was stored");
-});
-
-test("an entry that is not a domain is reported, not silently dropped", async () => {
-  const env = await loadPopup({ stored: { blurEverywhere: false, domains: [] } });
-  const domains = env.document.getElementById("domains");
-
-  domains.value = "x.com\nthis is not a domain";
-  dispatch(domains, "blur");
-
-  const snackbar = env.document.getElementById("snackbar");
-  assert.ok(snackbar.classList.contains("is-open"));
-  assert.match(snackbar.textContent, /skipped/i);
-  assert.deepEqual(plain(env.chrome.read().domains), ["x.com"]);
-});
-
 test("a change made elsewhere shows up in the popup", async () => {
-  const env = await loadPopup({ stored: { enabled: true } });
+  const env = await open({ stored: { enabled: true } });
   env.chrome.write({ enabled: false });
   assert.equal(env.document.getElementById("enabled").checked, false);
 });
 
-// ── Export and import ───────────────────────────────────────────────────────
+// ── Getting to the rest ─────────────────────────────────────────────────────
 
-test("export writes the current settings as JSON", async () => {
-  const env = await loadPopup({
-    stored: { enabled: false, blurEverywhere: false, domains: ["x.com"], blurRadius: 24 },
-  });
-  dispatch(env.document.getElementById("export"), "click");
-
-  assert.equal(env.downloads.length, 1);
-  const payload = JSON.parse(await env.downloads[0].text());
-  assert.equal(payload.app, "RedBlurer");
-  assert.equal(payload.config.enabled, false);
-  assert.deepEqual(plain(payload.config.domains), ["x.com"]);
-  assert.equal(payload.config.blurRadius, 24);
+test("the settings button opens the options page", async () => {
+  const env = await open();
+  dispatch(env.document.getElementById("open-options"), "click");
+  assert.equal(env.chrome.opened.options, 1);
 });
 
-test("importing a file applies and saves it", async () => {
-  const env = await loadPopup({ stored: { enabled: true, blurEverywhere: true } });
-  chooseFile(
-    env,
-    JSON.stringify({
-      app: "RedBlurer",
-      version: 2,
-      config: { enabled: false, blurEverywhere: false, domains: ["reddit.com"], blurRadius: 36 },
-    }),
-  );
-  await wait(50);
-
-  assert.equal(env.chrome.read().enabled, false);
-  assert.deepEqual(plain(env.chrome.read().domains), ["reddit.com"]);
-  assert.equal(env.document.getElementById("enabled").checked, false);
-  assert.equal(env.document.getElementById("domains").value, "reddit.com");
-  assert.match(env.document.getElementById("snackbar").textContent, /imported/i);
+test("the popup shows the panic shortcut that is actually bound", async () => {
+  const env = await open({ shortcuts: [{ name: "panic", shortcut: "Ctrl+Shift+9" }] });
+  assert.equal(env.document.getElementById("shortcut-panic").textContent, "Ctrl+Shift+9");
 });
 
-test("importing a config from the previous version works", async () => {
-  const env = await loadPopup({ stored: { enabled: true } });
-  chooseFile(env, JSON.stringify({ blurEnabled: false, blockedDomains: ["twitter.com"] }));
-  await wait(50);
-
-  assert.equal(env.chrome.read().enabled, false);
-  assert.deepEqual(plain(env.chrome.read().domains), ["twitter.com"]);
-});
-
-test("a bad import explains itself and changes nothing", async () => {
-  // The previous build caught the parse error and did nothing at all, so a
-  // mistyped file looked exactly like a successful import.
-  const env = await loadPopup({ stored: { enabled: true, blurRadius: 18 } });
-  chooseFile(env, "this is not json at all");
-  await wait(50);
-
-  const snackbar = env.document.getElementById("snackbar");
-  assert.ok(snackbar.classList.contains("is-open"));
-  assert.ok(snackbar.classList.contains("is-error"));
-  assert.match(snackbar.textContent, /valid JSON/i);
-  assert.equal(env.chrome.read().enabled, true, "settings should be left alone");
-  assert.equal(env.document.getElementById("enabled").checked, true);
-});
-
-test("a JSON file that is not a RedBlurer config is rejected", async () => {
-  const env = await loadPopup({ stored: { enabled: true } });
-  chooseFile(env, JSON.stringify({ someOtherApp: { theme: "dark" } }));
-  await wait(50);
-
-  const snackbar = env.document.getElementById("snackbar");
-  assert.ok(snackbar.classList.contains("is-error"));
-  assert.equal(env.chrome.read().enabled, true);
+test("the popup says so when no panic shortcut is bound", async () => {
+  const env = await open({ shortcuts: [{ name: "panic", shortcut: "" }] });
+  assert.match(env.document.getElementById("shortcut-panic").textContent, /no shortcut/i);
 });

@@ -21,14 +21,39 @@ const readSrc = (rel) => fs.readFileSync(path.join(SRC, rel), "utf8");
  * the extension depends on: asynchronous callbacks, and onChanged firing for
  * every listener after a write.
  */
-function createChromeStub(initial) {
+function createChromeStub(initial, options) {
   let store = { ...(initial || {}) };
   const changeListeners = [];
+  const activeTab = (options && options.activeTabUrl) || "";
+  const shortcuts = (options && options.shortcuts) || [
+    { name: "panic", shortcut: "Alt+Shift+H" },
+    { name: "toggle-blur", shortcut: "Alt+Shift+B" },
+  ];
+
+  const opened = { options: 0, tabs: [] };
 
   const api = {
     runtime: {
       lastError: undefined,
       getManifest: () => JSON.parse(readSrc("manifest.json")),
+      openOptionsPage: () => {
+        opened.options += 1;
+      },
+    },
+    // The popup asks which tab it was opened over, and both surfaces ask
+    // what the user's keyboard shortcuts currently are.
+    tabs: {
+      query(_query, callback) {
+        setTimeout(() => callback(activeTab ? [{ id: 1, url: activeTab }] : [{ id: 1 }]), 0);
+      },
+      create(details) {
+        opened.tabs.push(details.url);
+      },
+    },
+    commands: {
+      getAll(callback) {
+        setTimeout(() => callback(shortcuts), 0);
+      },
     },
     storage: {
       sync: {
@@ -70,13 +95,14 @@ function createChromeStub(initial) {
 
   return {
     api,
+    opened,
     read: () => ({ ...store }),
     /** Write as if another surface had changed a setting. */
     write: (values) => api.storage.sync.set(values, null),
   };
 }
 
-function makeWindow({ html, url, stored }) {
+function makeWindow({ html, url, stored, chromeOptions }) {
   // jsdom cannot lay out or parse every modern CSS feature; its complaints
   // about that are not interesting here.
   const virtualConsole = new VirtualConsole();
@@ -89,7 +115,7 @@ function makeWindow({ html, url, stored }) {
     virtualConsole,
   });
 
-  const chrome = createChromeStub(stored);
+  const chrome = createChromeStub(stored, chromeOptions);
   dom.window.chrome = chrome.api;
 
   return { dom, window: dom.window, document: dom.window.document, chrome };
@@ -114,6 +140,7 @@ function settle(window, frames = 3) {
  * A page with the content script running on it.
  *
  * @param {object} [options]
+ * @param {string} [options.head] markup for <head>, e.g. a <style> block
  * @param {string} [options.body] markup for <body>
  * @param {string} [options.url] page URL, which decides domain scoping
  * @param {object} [options.stored] initial chrome.storage.sync contents
@@ -121,7 +148,8 @@ function settle(window, frames = 3) {
 async function loadContentScript(options = {}) {
   const url = options.url || "https://example.com/feed";
   const body = options.body || "";
-  const html = `<!doctype html><html><head></head><body>${body}</body></html>`;
+  const head = options.head || "";
+  const html = `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
 
   const env = makeWindow({ html, url, stored: options.stored });
 
@@ -135,13 +163,17 @@ async function loadContentScript(options = {}) {
   return env;
 }
 
-/** The popup, wired up against a stubbed storage. */
-async function loadPopup(options = {}) {
-  const html = readSrc("popup/popup.html");
+/**
+ * One of the extension's own pages, wired up against a stubbed storage.
+ * @param {"popup"|"options"} name
+ */
+async function loadExtensionPage(name, options = {}) {
+  const html = readSrc(`${name}/${name}.html`);
   const env = makeWindow({
     html,
-    url: "chrome-extension://redblurer/popup/popup.html",
+    url: `chrome-extension://redblurer/${name}/${name}.html`,
     stored: options.stored,
+    chromeOptions: options,
   });
 
   // Downloads are not something jsdom can carry out.
@@ -153,13 +185,21 @@ async function loadPopup(options = {}) {
   env.window.URL.revokeObjectURL = () => {};
   env.window.HTMLAnchorElement.prototype.click = function () {};
 
+  // Same order the page's own script tags declare.
   env.window.eval(readSrc("shared/config.js"));
-  env.window.eval(readSrc("popup/popup.js"));
+  env.window.eval(readSrc("ui/store.js"));
+  env.window.eval(readSrc(`${name}/${name}.js`));
 
   env.settle = (frames) => settle(env.window, frames);
   await env.settle(1);
   return env;
 }
+
+/** The toolbar popup. */
+const loadPopup = (options) => loadExtensionPage("popup", options);
+
+/** The full settings page. */
+const loadOptions = (options) => loadExtensionPage("options", options);
 
 /** Fire a DOM event the way a browser would. */
 function dispatch(el, type, init) {
@@ -167,4 +207,13 @@ function dispatch(el, type, init) {
   el.dispatchEvent(new window.Event(type, { bubbles: true, ...init }));
 }
 
-module.exports = { loadContentScript, loadPopup, dispatch, settle, readSrc, SRC };
+module.exports = {
+  loadContentScript,
+  loadExtensionPage,
+  loadOptions,
+  loadPopup,
+  dispatch,
+  settle,
+  readSrc,
+  SRC,
+};

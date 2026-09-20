@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RedBlurer settings</title>
+    <link rel="stylesheet" href="../ui/m3.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="top-app-bar">
+      <span class="top-app-bar__leading" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
+          <path
+            d="M2.5 12C4.75 7.5 7.9 5.2 12 5.2s7.25 2.3 9.5 6.8c-2.25 4.5-5.4 6.8-9.5 6.8S4.75 16.5 2.5 12Z"
+            stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+          <circle cx="12" cy="12" r="2.8" stroke="currentColor" stroke-width="1.7" />
+          <path d="M4.5 4.5 19.5 19.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+        </svg>
+      </span>
+      <h1 class="top-app-bar__title">RedBlurer settings</h1>
+      <span class="badge" id="version-badge">&#8212;</span>
+    </header>
+
+    <main class="content">
+      <section class="card" aria-labelledby="behaviour-title">
+        <h3 class="card__title" id="behaviour-title">Revealing</h3>
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="lockBlur-label">Never unblur on hover</span>
+            <span class="list-item__supporting" id="lockBlur-desc">Keep everything hidden, even under the cursor</span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="lockBlur"
+              aria-labelledby="lockBlur-label" aria-describedby="lockBlur-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+        <div class="list-item" id="keepRevealed-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="keepRevealed-label">Keep media unblurred</span>
+            <span class="list-item__supporting" id="keepRevealed-desc">Once you reveal something, leave it visible</span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="keepRevealed"
+              aria-labelledby="keepRevealed-label" aria-describedby="keepRevealed-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="list-item list-item--stacked">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="blurRadius-label">Blur strength</span>
+            <span class="list-item__supporting" id="blurRadius-desc">18 pixels</span>
+          </span>
+          <input class="slider" type="range" id="blurRadius" min="4" max="60" step="1" value="18"
+            aria-labelledby="blurRadius-label" aria-describedby="blurRadius-desc" />
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="away-title">
+        <h3 class="card__title" id="away-title">When you look away</h3>
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="rehideOnBlur-label">Re-hide when I switch away</span>
+            <span class="list-item__supporting" id="rehideOnBlur-desc">Anything you revealed goes back behind the blur</span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="rehideOnBlur"
+              aria-labelledby="rehideOnBlur-label" aria-describedby="rehideOnBlur-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="select">
+            <select class="select__input" id="rehideAfterSeconds" aria-describedby="rehide-support">
+              <option value="0">Never</option>
+              <option value="30">After 30 seconds</option>
+              <option value="60">After 1 minute</option>
+              <option value="120">After 2 minutes</option>
+              <option value="300">After 5 minutes</option>
+              <option value="600">After 10 minutes</option>
+            </select>
+            <label class="select__label" for="rehideAfterSeconds">Re-hide when idle</label>
+          </div>
+          <p class="supporting-text" id="rehide-support">
+            Counts from your last click, keypress or scroll on the page.
+          </p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="scope-title">
+        <h3 class="card__title" id="scope-title">Where to blur</h3>
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="blurEverywhere-label">Blur on every site</span>
+            <span class="list-item__supporting" id="blurEverywhere-desc">Turn this off to use the list below instead</span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="blurEverywhere"
+              aria-labelledby="blurEverywhere-label" aria-describedby="blurEverywhere-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="field" id="domains-field">
+          <div class="text-field">
+            <textarea class="text-field__input" id="domains" rows="5" spellcheck="false"
+              autocomplete="off" placeholder=" " aria-describedby="domains-support"></textarea>
+            <label class="text-field__label" for="domains">Domain list</label>
+          </div>
+          <p class="supporting-text" id="domains-support">
+            One per line. Subdomains are included automatically.
+          </p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="detection-title">
+        <h3 class="card__title" id="detection-title">Detection</h3>
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="deepScan-label">Find stylesheet backgrounds</span>
+            <span class="list-item__supporting" id="deepScan-desc">Catches images a page sets from CSS rather than inline. Turn off if a site feels slow.</span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="deepScan"
+              aria-labelledby="deepScan-label" aria-describedby="deepScan-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="shortcuts-title">
+        <h3 class="card__title" id="shortcuts-title">Keyboard shortcuts</h3>
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline">Hide everything now</span>
+            <span class="list-item__supporting">Press again to release. <kbd id="shortcut-panic">not set</kbd></span>
+          </span>
+        </div>
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline">Turn blurring on or off</span>
+            <span class="list-item__supporting"><kbd id="shortcut-toggle">not set</kbd></span>
+          </span>
+        </div>
+        <div class="actions">
+          <button class="button button--outlined" id="edit-shortcuts" type="button">Change shortcuts</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="backup-title">
+        <h3 class="card__title" id="backup-title">Backup</h3>
+        <p class="supporting-text">
+          Save your settings to a file, or load one you saved before. Files from
+          version 1 still work.
+        </p>
+        <div class="actions">
+          <button class="button button--outlined" id="export" type="button">Export</button>
+          <button class="button button--tonal" id="import" type="button">Import</button>
+          <input type="file" id="import-file" accept="application/json,.json" hidden />
+        </div>
+      </section>
+
+      <p class="footnote">Keep your feed to yourself.</p>
+    </main>
+
+    <div class="snackbar" id="snackbar" role="status" aria-live="polite"></div>
+
+    <script src="../shared/config.js"></script>
+    <script src="../ui/store.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

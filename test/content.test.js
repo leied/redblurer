@@ -283,3 +283,191 @@ test("a video is left alone once the page is out of scope", async () => {
   dispatch(video, "play");
   assert.equal(video.pauseCalls, before, "with blurring off, playback is none of our business");
 });
+
+// ── Stylesheet background images ────────────────────────────────────────────
+//
+// The cheap path only sees inline styles. These cover the deep scan, which
+// asks the browser for computed styles in idle time. jsdom has no
+// requestIdleCallback, so the content script falls back to a timer and the
+// tests wait for it.
+
+const DEEP_SCAN_WAIT = 160;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const CARD_CSS = `<style>
+  .card { background-image: url(photo.jpg); }
+  .plain { background-color: #eee; }
+</style>`;
+
+test("a background image set by a stylesheet is found and blurred", async () => {
+  const env = await loadContentScript({
+    head: CARD_CSS,
+    body: `<div id="card" class="card"></div>`,
+  });
+  await pause(DEEP_SCAN_WAIT);
+  await env.settle();
+
+  assert.equal(stateOf(env.document.getElementById("card")), "blurred");
+});
+
+test("an element with no background image is left alone", async () => {
+  const env = await loadContentScript({
+    head: CARD_CSS,
+    body: `<div id="plain" class="plain"></div>`,
+  });
+  await pause(DEEP_SCAN_WAIT);
+  await env.settle();
+
+  assert.equal(stateOf(env.document.getElementById("plain")), null);
+});
+
+test("the deep scan can be switched off", async () => {
+  const env = await loadContentScript({
+    head: CARD_CSS,
+    body: `<div id="card" class="card"></div>`,
+    stored: { deepScan: false },
+  });
+  await pause(DEEP_SCAN_WAIT);
+  await env.settle();
+
+  assert.equal(stateOf(env.document.getElementById("card")), null);
+});
+
+test("a full-page backdrop is never blurred", async () => {
+  // Blurring one of these would blur every word sitting on top of it, which
+  // would make the page unreadable rather than private.
+  const env = await loadContentScript({
+    head: CARD_CSS,
+    body: `<div id="card" class="card"></div>`,
+  });
+  const card = env.document.getElementById("card");
+  sized(card, env.window.innerWidth, env.window.innerHeight);
+
+  await pause(DEEP_SCAN_WAIT);
+  await env.settle();
+  assert.equal(stateOf(card), null);
+});
+
+test("a stylesheet background too small to matter is skipped", async () => {
+  const env = await loadContentScript({
+    head: CARD_CSS,
+    body: `<div id="card" class="card"></div>`,
+  });
+  sized(env.document.getElementById("card"), 20, 20);
+
+  await pause(DEEP_SCAN_WAIT);
+  await env.settle();
+  assert.equal(stateOf(env.document.getElementById("card")), null);
+});
+
+test("the body is never treated as media", async () => {
+  const env = await loadContentScript({
+    head: `<style>body { background-image: url(wallpaper.jpg); }</style>`,
+    body: `<p>readable text</p>`,
+  });
+  await pause(DEEP_SCAN_WAIT);
+  await env.settle();
+
+  assert.equal(stateOf(env.document.body), null);
+  assert.equal(stateOf(env.document.documentElement), null);
+});
+
+test("a stylesheet background added later is picked up", async () => {
+  const env = await loadContentScript({ head: CARD_CSS, body: "" });
+  const card = env.document.createElement("div");
+  card.id = "card";
+  card.className = "card";
+  env.document.body.appendChild(card);
+
+  await pause(DEEP_SCAN_WAIT);
+  await env.settle();
+  assert.equal(stateOf(card), "blurred");
+});
+
+// ── Re-hiding when you look away ────────────────────────────────────────────
+
+/** Put the pointer over an element, piercing jsdom's lack of hit testing. */
+function hover(env, el) {
+  env.document.elementsFromPoint = () => [el];
+  const event = new env.window.MouseEvent("pointermove", {
+    bubbles: true,
+    clientX: 10,
+    clientY: 10,
+  });
+  env.document.dispatchEvent(event);
+}
+
+async function revealOne(env) {
+  const img = env.document.querySelector("img");
+  hover(env, img);
+  await env.settle();
+  assert.equal(stateOf(img), "revealed", "precondition: the image should be revealed");
+  return img;
+}
+
+test("switching away puts revealed media back behind the blur", async () => {
+  const env = await loadContentScript({
+    body: "<img src='a.jpg'>",
+    stored: { keepRevealed: true, rehideOnBlur: true },
+  });
+  const img = await revealOne(env);
+
+  env.window.dispatchEvent(new env.window.Event("blur"));
+  await env.settle();
+
+  assert.equal(stateOf(img), "blurred");
+});
+
+test("hiding the tab does the same", async () => {
+  const env = await loadContentScript({
+    body: "<img src='a.jpg'>",
+    stored: { keepRevealed: true, rehideOnBlur: true },
+  });
+  const img = await revealOne(env);
+
+  Object.defineProperty(env.document, "visibilityState", {
+    value: "hidden",
+    configurable: true,
+  });
+  env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+  await env.settle();
+
+  assert.equal(stateOf(img), "blurred");
+});
+
+test("re-hiding on switch away can be turned off", async () => {
+  const env = await loadContentScript({
+    body: "<img src='a.jpg'>",
+    stored: { keepRevealed: true, rehideOnBlur: false },
+  });
+  const img = await revealOne(env);
+
+  env.window.dispatchEvent(new env.window.Event("blur"));
+  await env.settle();
+
+  assert.equal(stateOf(img), "revealed");
+});
+
+test("sitting idle puts revealed media back behind the blur", async () => {
+  const env = await loadContentScript({
+    body: "<img src='a.jpg'>",
+    stored: { keepRevealed: true, rehideAfterSeconds: 1, rehideOnBlur: false },
+  });
+  const img = await revealOne(env);
+
+  await pause(1200);
+  await env.settle();
+  assert.equal(stateOf(img), "blurred");
+});
+
+test("an idle delay of zero means never", async () => {
+  const env = await loadContentScript({
+    body: "<img src='a.jpg'>",
+    stored: { keepRevealed: true, rehideAfterSeconds: 0, rehideOnBlur: false },
+  });
+  const img = await revealOne(env);
+
+  await pause(600);
+  await env.settle();
+  assert.equal(stateOf(img), "revealed");
+});

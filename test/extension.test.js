@@ -40,6 +40,7 @@ test("every file the manifest points at exists", () => {
   const referenced = [
     manifest.background.service_worker,
     manifest.action.default_popup,
+    manifest.options_ui.page,
     ...Object.values(manifest.icons),
     ...Object.values(manifest.action.default_icon),
     ...manifest.content_scripts.flatMap((cs) => [...(cs.js || []), ...(cs.css || [])]),
@@ -98,82 +99,130 @@ test("nothing in the UI loads from the network", () => {
   }
 });
 
-// ── Popup wiring ────────────────────────────────────────────────────────────
+// ── Extension page wiring ───────────────────────────────────────────────────
+//
+// The popup and the options page share a design system and a settings store,
+// so they get checked the same way rather than one of them drifting.
 
-const popupHtml = read("popup/popup.html");
-const popupJs = read("popup/popup.js");
-const htmlIds = new Set([...popupHtml.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
+const PAGES = ["popup", "options"];
 
-test("the popup loads its scripts and styles from disk", () => {
-  const refs = [...popupHtml.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(refs.length > 0);
-  for (const ref of refs) {
-    const resolved = path.resolve(SRC, "popup", ref);
-    assert.ok(fs.existsSync(resolved), `popup references a missing file: ${ref}`);
-  }
-});
+for (const page of PAGES) {
+  const html = read(`${page}/${page}.html`);
+  const js = read(`${page}/${page}.js`);
+  const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
 
-test("the popup loads the shared config before its own script", () => {
-  assert.ok(
-    popupHtml.indexOf("../shared/config.js") < popupHtml.indexOf("popup.js"),
-    "popup.js reads RedBlurerConfig at load time",
-  );
-});
+  test(`the ${page} loads its scripts and styles from disk`, () => {
+    const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(refs.length > 0);
+    for (const ref of refs) {
+      const resolved = path.resolve(SRC, page, ref);
+      assert.ok(fs.existsSync(resolved), `${page} references a missing file: ${ref}`);
+    }
+  });
 
-test("every element the popup script looks up exists in the markup", () => {
-  const looked = [...popupJs.matchAll(/getElementById\("([^"]+)"\)/g)].map((m) => m[1]);
-  assert.ok(looked.length > 10, "expected the popup to wire up its controls");
-  for (const id of looked) {
-    assert.ok(htmlIds.has(id), `popup.js looks up #${id}, which the markup does not define`);
-  }
-});
+  test(`the ${page} loads its dependencies before its own script`, () => {
+    // Both read RedBlurerConfig and RedBlurerStore at load time.
+    assert.ok(html.indexOf("../shared/config.js") < html.indexOf("../ui/store.js"));
+    assert.ok(html.indexOf("../ui/store.js") < html.indexOf(`${page}.js`));
+  });
 
-test("every id in the markup is used, so nothing is left dangling", () => {
-  for (const id of htmlIds) {
-    const used =
-      popupJs.includes(`"${id}"`) ||
-      new RegExp(`(?:for|aria-labelledby|aria-describedby)="[^"]*\\b${id}\\b`).test(popupHtml);
-    assert.ok(used, `#${id} is defined but never referenced`);
-  }
-});
+  test(`the ${page} uses the shared design system`, () => {
+    assert.ok(html.includes("../ui/m3.css"), `${page} should link ui/m3.css`);
+  });
 
-test("every accessibility reference points at a real element", () => {
-  const refs = [
-    ...popupHtml.matchAll(/(?:aria-labelledby|aria-describedby|for)="([^"]+)"/g),
-  ].flatMap((m) => m[1].split(/\s+/));
-  assert.ok(refs.length > 0);
-  for (const id of refs) {
-    assert.ok(htmlIds.has(id), `accessibility attribute points at missing #${id}`);
-  }
-});
+  test(`every element the ${page} script looks up exists in the markup`, () => {
+    const looked = [...js.matchAll(/getElementById\("([^"]+)"\)/g)].map((m) => m[1]);
+    assert.ok(looked.length > 5, `expected the ${page} to wire up its controls`);
+    for (const id of looked) {
+      assert.ok(ids.has(id), `${page}.js looks up #${id}, which the markup does not define`);
+    }
+  });
 
-test("every control the user can operate is labelled", () => {
-  const fields = [...popupHtml.matchAll(/<(input|textarea)\b[^>]*>/g)].map((m) => m[0]);
-  for (const tag of fields) {
-    // A file picker we drive from a button, and anything hidden, has no user
-    // -facing presence to name.
-    if (/\btype="file"/.test(tag) || /\bhidden\b/.test(tag)) continue;
-    const id = (tag.match(/\bid="([^"]+)"/) || [])[1];
-    const labelled =
-      /aria-labelledby=|aria-label=/.test(tag) ||
-      (id && new RegExp(`for="${id}"`).test(popupHtml));
-    assert.ok(labelled, `control has no accessible name: ${tag.slice(0, 80)}`);
-  }
+  test(`every id in the ${page} markup is used, so nothing is left dangling`, () => {
+    for (const id of ids) {
+      const used =
+        js.includes(`"${id}"`) ||
+        new RegExp(`(?:for|aria-labelledby|aria-describedby)="[^"]*\\b${id}\\b`).test(html);
+      assert.ok(used, `#${id} is defined in the ${page} but never referenced`);
+    }
+  });
 
-  // A button takes its name from its own content, so it just needs content.
-  const buttons = [...popupHtml.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
-  assert.ok(buttons.length > 0, "expected the popup to have buttons");
-  for (const [, attrs, body] of buttons) {
-    const named = /aria-label=|aria-labelledby=/.test(attrs) || body.trim().length > 0;
-    assert.ok(named, `button has no accessible name: <button${attrs}>`);
-  }
-});
+  test(`every accessibility reference in the ${page} points at a real element`, () => {
+    const refs = [
+      ...html.matchAll(/(?:aria-labelledby|aria-describedby|for)="([^"]+)"/g),
+    ].flatMap((m) => m[1].split(/\s+/));
+    assert.ok(refs.length > 0);
+    for (const id of refs) {
+      assert.ok(ids.has(id), `${page} points at missing #${id}`);
+    }
+  });
+
+  test(`every control in the ${page} is labelled`, () => {
+    const fields = [...html.matchAll(/<(input|textarea|select)\b[^>]*>/g)].map((m) => m[0]);
+    for (const tag of fields) {
+      if (/\btype="file"/.test(tag) || /\bhidden\b/.test(tag)) continue;
+      const id = (tag.match(/\bid="([^"]+)"/) || [])[1];
+      const labelled =
+        /aria-labelledby=|aria-label=/.test(tag) ||
+        (id && new RegExp(`for="${id}"`).test(html));
+      assert.ok(labelled, `control has no accessible name: ${tag.slice(0, 80)}`);
+    }
+
+    // A button takes its name from its own content, so it just needs content.
+    const buttons = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
+    for (const [, attrs, body] of buttons) {
+      const named = /aria-label=|aria-labelledby=/.test(attrs) || body.trim().length > 0;
+      assert.ok(named, `button has no accessible name: <button${attrs}>`);
+    }
+  });
+}
 
 test("the blur radius control matches the range the config enforces", () => {
   const Config = require("../src/shared/config.js");
-  const slider = popupHtml.match(/<input[^>]*id="blurRadius"[^>]*>/)[0];
+  const slider = read("options/options.html").match(/<input[^>]*id="blurRadius"[^>]*>/)[0];
   assert.ok(slider.includes(`min="${Config.MIN_BLUR_RADIUS}"`), "slider min should match config");
   assert.ok(slider.includes(`max="${Config.MAX_BLUR_RADIUS}"`), "slider max should match config");
+});
+
+test("every idle delay the menu offers is one the config will accept", () => {
+  const Config = require("../src/shared/config.js");
+  const values = [
+    ...read("options/options.html").matchAll(/<option value="(\d+)"/g),
+  ].map((m) => Number(m[1]));
+  assert.ok(values.length > 1, "expected a choice of idle delays");
+  for (const seconds of values) {
+    assert.equal(
+      Config.clampRehideSeconds(seconds),
+      seconds,
+      `${seconds}s would be changed by the config`,
+    );
+  }
+});
+
+// ── Keyboard shortcuts ──────────────────────────────────────────────────────
+
+test("every declared command has a handler, and every handler is declared", () => {
+  // A command with no handler does nothing when pressed, and a handler with
+  // no command can never fire. Both fail silently.
+  const backgroundJs = read("background.js");
+  const declared = Object.keys(manifest.commands);
+  const handled = [...backgroundJs.matchAll(/async\s+"?([a-z-]+)"?\s*\(\s*\)\s*\{/g)]
+    .map((m) => m[1])
+    .filter((name) => name !== "update");
+
+  for (const name of declared) {
+    assert.ok(handled.includes(name), `command "${name}" is declared but not handled`);
+  }
+  for (const name of handled) {
+    assert.ok(declared.includes(name), `command "${name}" is handled but not declared`);
+  }
+});
+
+test("every command describes itself for the shortcuts UI", () => {
+  for (const [name, command] of Object.entries(manifest.commands)) {
+    assert.ok(command.description, `command "${name}" needs a description`);
+    assert.ok(command.suggested_key, `command "${name}" needs a default key`);
+  }
 });
 
 // ── Content script and styles ───────────────────────────────────────────────

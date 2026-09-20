@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "RedBlurer",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Blurs images and videos while you browse, so a glance over your shoulder sees nothing. Hover to reveal.",
-  "permissions": ["storage"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "RedBlurer",
@@ -14,11 +18,38 @@
       "128": "icons/icon128.png"
     }
   },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "panic": {
+      "suggested_key": {
+        "default": "Alt+Shift+H"
+      },
+      "description": "Hide everything now (press again to release)"
+    },
+    "toggle-blur": {
+      "suggested_key": {
+        "default": "Alt+Shift+B"
+      },
+      "description": "Turn blurring on or off"
+    }
+  },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["shared/config.js", "shared/media.js", "content/content.js"],
-      "css": ["content/content.css"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "shared/config.js",
+        "shared/media.js",
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
       "run_at": "document_start",
       "all_frames": true,
       "match_origin_as_fallback": true

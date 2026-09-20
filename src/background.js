@@ -13,12 +13,18 @@
  */
 "use strict";
 
-importScripts("shared/config.js");
+// Chrome runs this as a service worker, where importScripts is how you pull in
+// a dependency. Firefox runs it as an event page, which has no importScripts
+// and instead lists shared/config.js alongside this file in its manifest.
+if (typeof importScripts === "function") {
+  importScripts("shared/config.js");
+}
 
 const Config = globalThis.RedBlurerConfig;
 
 const BADGE_OFF_TEXT = "OFF";
-const BADGE_OFF_COLOR = "#BA1A1A";
+const BADGE_LOCKED_TEXT = "HOLD";
+const BADGE_COLOR = "#BA1A1A";
 
 /** Promise wrappers, so the logic below reads top to bottom. */
 function readAll() {
@@ -50,18 +56,28 @@ function removeKeys(keys) {
 }
 
 /**
- * Reflect the global on/off switch in the toolbar.
- * A badge is the only signal the user gets that blurring is off without
- * opening the popup, which matters when the whole point is not being caught out.
+ * Reflect the current mode in the toolbar.
+ *
+ * The badge is the only signal you get without opening the popup, which
+ * matters most right after a panic keypress: you need to know it landed.
  */
 async function refreshBadge(config) {
   const cfg = Config.normalizeConfig(config || (await readAll()));
+
+  let text = "";
+  let title = "RedBlurer — blurring media";
+  if (!cfg.enabled) {
+    text = BADGE_OFF_TEXT;
+    title = "RedBlurer — blurring is off";
+  } else if (cfg.lockBlur) {
+    text = BADGE_LOCKED_TEXT;
+    title = "RedBlurer — holding everything blurred";
+  }
+
   try {
-    await chrome.action.setBadgeText({ text: cfg.enabled ? "" : BADGE_OFF_TEXT });
-    await chrome.action.setBadgeBackgroundColor({ color: BADGE_OFF_COLOR });
-    await chrome.action.setTitle({
-      title: cfg.enabled ? "RedBlurer — blurring media" : "RedBlurer — blurring is off",
-    });
+    await chrome.action.setBadgeText({ text });
+    await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
+    await chrome.action.setTitle({ title });
   } catch {
     /* action API unavailable during teardown */
   }
@@ -108,9 +124,51 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync") return;
-  if (!Object.prototype.hasOwnProperty.call(changes, "enabled")) return;
+  const relevant = ["enabled", "lockBlur"];
+  if (!relevant.some((key) => Object.prototype.hasOwnProperty.call(changes, key))) return;
   refreshBadge();
 });
+
+// ── Keyboard shortcuts ──────────────────────────────────────────────────────
+//
+// The point of these is speed. Opening the popup and finding a switch takes
+// several seconds; someone walking up behind you does not take several
+// seconds. Everything here is a storage write, which every content script is
+// already listening for, so no extra plumbing is needed.
+
+/** Apply a change to the stored config and let the badge catch up. */
+async function update(patch) {
+  const config = Config.mergeConfig(await readAll(), patch);
+  await write(config);
+  await refreshBadge(config);
+  return config;
+}
+
+const COMMANDS = {
+  /**
+   * Hide everything now, and again to let go. Locking also switches the
+   * extension on, because a panic key that does nothing when you happen to
+   * have blurring off is worse than no panic key at all.
+   */
+  async panic() {
+    const current = Config.normalizeConfig(await readAll());
+    const locking = !(current.enabled && current.lockBlur);
+    return update(locking ? { enabled: true, lockBlur: true } : { lockBlur: false });
+  },
+
+  /** Plain on/off, for when you actually want to see the page. */
+  async "toggle-blur"() {
+    const current = Config.normalizeConfig(await readAll());
+    return update({ enabled: !current.enabled });
+  },
+};
+
+if (chrome.commands && chrome.commands.onCommand) {
+  chrome.commands.onCommand.addListener((command) => {
+    const handler = COMMANDS[command];
+    if (handler) handler();
+  });
+}
 
 // The worker can be spun up for reasons other than the events above; make
 // sure the badge is right whenever it wakes.

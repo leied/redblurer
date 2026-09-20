@@ -1,0 +1,44 @@
+/*
+ * options/options.css — layout for the full settings page.
+ *
+ * The design system lives in ui/m3.css. This file only arranges it into a
+ * readable column on a full browser tab.
+ */
+
+body {
+  background: var(--md-sys-color-surface);
+  min-height: 100vh;
+}
+
+.top-app-bar {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 72px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}
+
+/* A settings page has room to breathe that a popup does not. */
+.card {
+  padding: 8px 8px 16px;
+}
+
+.footnote {
+  padding-top: 8px;
+}
+
+@media (max-width: 600px) {
+  .top-app-bar,
+  .content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

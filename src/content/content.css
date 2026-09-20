@@ -20,6 +20,11 @@
 
 :root {
   --redblurer-radius: 18px;
+  /* What the blur becomes while revealing. Zero normally; the full radius
+     when the blur is held, which is how "never unblur" is enforced. Using a
+     custom property rather than a selector means the same rule works inside
+     a shadow root, where Firefox has no :host-context to lean on. */
+  --redblurer-reveal: 0px;
   --redblurer-ease: cubic-bezier(0.2, 0, 0, 1);
   --redblurer-duration: 200ms;
 }
@@ -46,7 +51,7 @@ html.redblurer-boot :is(img, video, [style*="background-image"]) {
    drops straight back to blurred, with no fade to be caught out by. */
 [data-redblurer="blurred"][data-redblurer-hover],
 [data-redblurer="blurred"]:hover {
-  filter: blur(0) !important;
+  filter: blur(var(--redblurer-reveal)) !important;
   transition: filter var(--redblurer-duration) var(--redblurer-ease) !important;
 }
 
@@ -63,9 +68,9 @@ html.redblurer-boot :is(img, video, [style*="background-image"]) {
    styling. */
 
 /* ── Locked ──────────────────────────────────────────────────────────────
-   "Never unblur on hover" outranks both reveal paths on specificity. */
+   "Never unblur on hover" is carried by --redblurer-reveal above, so the
+   blur never lifts. All that is left here is to stop promising otherwise. */
 html.redblurer-locked [data-redblurer="blurred"] {
-  filter: blur(var(--redblurer-radius)) !important;
   cursor: default !important;
   transition: none !important;
 }
