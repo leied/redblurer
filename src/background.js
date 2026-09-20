@@ -1,229 +1,117 @@
-// background.js — RedBlurer service worker
-
-// Default state: blurring enabled, no domain block list, blockAll off
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.sync.set({
-    blurEnabled: true,
-    blockAll: false,
-    blockedDomains: [],
-    persistentUnblur: false,
-    noHoverUnblur: false,
-  });
-});
-
 /**
- * Helper to broadcast full config update to all tabs.
+ * background.js — RedBlurer service worker.
+ *
+ * Deliberately small. The popup writes settings straight to chrome.storage
+ * and content scripts react to chrome.storage.onChanged, so there is no
+ * message-passing layer to keep in sync. That removes the whole class of bug
+ * where one surface updates and another quietly does not.
+ *
+ * What is left genuinely needs a background context:
+ *   • seeding defaults on first install
+ *   • migrating v1 setting names on upgrade
+ *   • keeping the toolbar badge honest about whether blurring is on
  */
-function broadcastConfigUpdate(config) {
-  chrome.tabs.query({}, (tabs) => {
-    tabs.forEach((tab) => {
-      if (!tab.id) return;
-      chrome.tabs.sendMessage(
-        tab.id,
-        {
-          type: "CONFIG_UPDATE",
-          blurEnabled: config.blurEnabled,
-          blockAll: config.blockAll,
-          blockedDomains: config.blockedDomains,
-          persistentUnblur: config.persistentUnblur,
-          noHoverUnblur: config.noHoverUnblur,
-        },
-        () => {
-          // Intentionally ignore "no receiving end" errors on tabs
-          // where the content script is not injected.
-          void chrome.runtime.lastError;
-        },
-      );
+"use strict";
+
+importScripts("shared/config.js");
+
+const Config = globalThis.RedBlurerConfig;
+
+const BADGE_OFF_TEXT = "OFF";
+const BADGE_OFF_COLOR = "#BA1A1A";
+
+/** Promise wrappers, so the logic below reads top to bottom. */
+function readAll() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(null, (stored) => {
+      void chrome.runtime.lastError;
+      resolve(stored || {});
     });
   });
 }
 
-// Relay toggle messages from popup to active tab's content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "GET_STATE") {
-    chrome.storage.sync.get(
-      [
-        "blurEnabled",
-        "blockAll",
-        "blockedDomains",
-        "persistentUnblur",
-        "noHoverUnblur",
-      ],
-      (data) => {
-        sendResponse({
-          blurEnabled: data.blurEnabled ?? true,
-          blockAll: data.blockAll ?? false,
-          blockedDomains: Array.isArray(data.blockedDomains)
-            ? data.blockedDomains
-            : [],
-          persistentUnblur: data.persistentUnblur ?? false,
-          noHoverUnblur: data.noHoverUnblur ?? false,
-        });
-      },
-    );
-    return true; // keep channel open for async sendResponse
-  }
-
-  if (message.type === "SET_STATE") {
-    chrome.storage.sync.get(
-      ["blockAll", "blockedDomains", "persistentUnblur", "noHoverUnblur"],
-      (data) => {
-        const config = {
-          blurEnabled: message.blurEnabled,
-          blockAll: data.blockAll ?? false,
-          blockedDomains: Array.isArray(data.blockedDomains)
-            ? data.blockedDomains
-            : [],
-          persistentUnblur: data.persistentUnblur ?? false,
-          noHoverUnblur: data.noHoverUnblur ?? false,
-        };
-        chrome.storage.sync.set(config, () => {
-          broadcastConfigUpdate(config);
-          sendResponse({ ok: true });
-        });
-      },
-    );
-    return true;
-  }
-
-  // Update blockAll toggle
-  if (message.type === "SET_BLOCK_ALL") {
-    chrome.storage.sync.get(
-      ["blurEnabled", "blockedDomains", "persistentUnblur", "noHoverUnblur"],
-      (data) => {
-        const config = {
-          blurEnabled: data.blurEnabled ?? true,
-          blockAll: !!message.blockAll,
-          blockedDomains: Array.isArray(data.blockedDomains)
-            ? data.blockedDomains
-            : [],
-          persistentUnblur: data.persistentUnblur ?? false,
-          noHoverUnblur: data.noHoverUnblur ?? false,
-        };
-        chrome.storage.sync.set(config, () => {
-          broadcastConfigUpdate(config);
-          sendResponse({ ok: true });
-        });
-      },
-    );
-    return true;
-  }
-
-  // Replace entire blocked domain list
-  if (message.type === "SET_BLOCKED_DOMAINS") {
-    const list = Array.isArray(message.blockedDomains)
-      ? message.blockedDomains
-      : [];
-    chrome.storage.sync.get(
-      ["blurEnabled", "blockAll", "persistentUnblur", "noHoverUnblur"],
-      (data) => {
-        const config = {
-          blurEnabled: data.blurEnabled ?? true,
-          blockAll: data.blockAll ?? false,
-          blockedDomains: list,
-          persistentUnblur: data.persistentUnblur ?? false,
-          noHoverUnblur: data.noHoverUnblur ?? false,
-        };
-        chrome.storage.sync.set(config, () => {
-          broadcastConfigUpdate(config);
-          sendResponse({ ok: true, blockedDomains: list });
-        });
-      },
-    );
-    return true;
-  }
-
-  // Export current configuration (blurEnabled, blockAll, blockedDomains)
-  if (message.type === "EXPORT_CONFIG") {
-    chrome.storage.sync.get(
-      [
-        "blurEnabled",
-        "blockAll",
-        "blockedDomains",
-        "persistentUnblur",
-        "noHoverUnblur",
-      ],
-      (data) => {
-        const config = {
-          blurEnabled: data.blurEnabled ?? true,
-          blockAll: data.blockAll ?? false,
-          blockedDomains: Array.isArray(data.blockedDomains)
-            ? data.blockedDomains
-            : [],
-          persistentUnblur: data.persistentUnblur ?? false,
-          noHoverUnblur: data.noHoverUnblur ?? false,
-        };
-        sendResponse({ ok: true, config });
-      },
-    );
-    return true;
-  }
-
-  // Import configuration (expects same structure as EXPORT_CONFIG)
-  if (message.type === "IMPORT_CONFIG") {
-    const cfg = message.config || {};
-    const next = {
-      blurEnabled:
-        typeof cfg.blurEnabled === "boolean" ? cfg.blurEnabled : true,
-      blockAll: !!cfg.blockAll,
-      blockedDomains: Array.isArray(cfg.blockedDomains)
-        ? cfg.blockedDomains
-        : [],
-      persistentUnblur: !!cfg.persistentUnblur,
-      noHoverUnblur: !!cfg.noHoverUnblur,
-    };
-
-    chrome.storage.sync.set(next, () => {
-      // Broadcast full config so content scripts can react
-      broadcastConfigUpdate(next);
-      sendResponse({ ok: true, applied: next });
+function write(values) {
+  return new Promise((resolve) => {
+    chrome.storage.sync.set(values, () => {
+      void chrome.runtime.lastError;
+      resolve();
     });
-    return true;
-  }
+  });
+}
 
-  // Handle persistent unblur toggle
-  if (message.type === "SET_PERSISTENT_UNBLUR") {
-    chrome.storage.sync.get(
-      ["blurEnabled", "blockAll", "blockedDomains", "noHoverUnblur"],
-      (data) => {
-        const config = {
-          blurEnabled: data.blurEnabled ?? true,
-          blockAll: data.blockAll ?? false,
-          blockedDomains: Array.isArray(data.blockedDomains)
-            ? data.blockedDomains
-            : [],
-          persistentUnblur: !!message.persistentUnblur,
-          noHoverUnblur: data.noHoverUnblur ?? false,
-        };
-        chrome.storage.sync.set(config, () => {
-          broadcastConfigUpdate(config);
-          sendResponse({ ok: true });
-        });
-      },
-    );
-    return true;
-  }
+function removeKeys(keys) {
+  if (!keys.length) return Promise.resolve();
+  return new Promise((resolve) => {
+    chrome.storage.sync.remove(keys, () => {
+      void chrome.runtime.lastError;
+      resolve();
+    });
+  });
+}
 
-  // Handle no-hover-unblur toggle
-  if (message.type === "SET_NO_HOVER_UNBLUR") {
-    chrome.storage.sync.get(
-      ["blurEnabled", "blockAll", "blockedDomains", "persistentUnblur"],
-      (data) => {
-        const config = {
-          blurEnabled: data.blurEnabled ?? true,
-          blockAll: data.blockAll ?? false,
-          blockedDomains: Array.isArray(data.blockedDomains)
-            ? data.blockedDomains
-            : [],
-          persistentUnblur: data.persistentUnblur ?? false,
-          noHoverUnblur: !!message.noHoverUnblur,
-        };
-        chrome.storage.sync.set(config, () => {
-          broadcastConfigUpdate(config);
-          sendResponse({ ok: true });
-        });
-      },
-    );
-    return true;
+/**
+ * Reflect the global on/off switch in the toolbar.
+ * A badge is the only signal the user gets that blurring is off without
+ * opening the popup, which matters when the whole point is not being caught out.
+ */
+async function refreshBadge(config) {
+  const cfg = Config.normalizeConfig(config || (await readAll()));
+  try {
+    await chrome.action.setBadgeText({ text: cfg.enabled ? "" : BADGE_OFF_TEXT });
+    await chrome.action.setBadgeBackgroundColor({ color: BADGE_OFF_COLOR });
+    await chrome.action.setTitle({
+      title: cfg.enabled ? "RedBlurer — blurring media" : "RedBlurer — blurring is off",
+    });
+  } catch {
+    /* action API unavailable during teardown */
   }
+}
+
+/**
+ * Write a complete, normalized config back to storage and drop any v1 keys.
+ * Running this on every install and update means storage only ever holds one
+ * shape, so nothing downstream has to know v1 existed.
+ */
+async function reconcile(stored) {
+  const config = Config.normalizeConfig(stored);
+  await write(config);
+
+  const stale = Object.values(Config.LEGACY_KEYS).filter((key) =>
+    Object.prototype.hasOwnProperty.call(stored, key),
+  );
+  await removeKeys(stale);
+  return config;
+}
+
+chrome.runtime.onInstalled.addListener((details) => {
+  (async () => {
+    const stored = await readAll();
+
+    if (details.reason === "install") {
+      // Nothing to preserve; write the defaults verbatim.
+      const config = Config.normalizeConfig(null);
+      await write(config);
+      await refreshBadge(config);
+      return;
+    }
+
+    // On update, keep whatever the user had. The previous build reset every
+    // setting here, because it never checked why the event fired.
+    const config = await reconcile(stored);
+    await refreshBadge(config);
+  })();
 });
+
+chrome.runtime.onStartup.addListener(() => {
+  refreshBadge();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "sync") return;
+  if (!Object.prototype.hasOwnProperty.call(changes, "enabled")) return;
+  refreshBadge();
+});
+
+// The worker can be spun up for reasons other than the events above; make
+// sure the badge is right whenever it wakes.
+refreshBadge();

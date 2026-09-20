@@ -1,0 +1,79 @@
+/*
+ * content/content.css — the blur itself.
+ *
+ * Injected at document_start so media is covered before the first paint.
+ * Everything keys off attributes that content.js owns:
+ *
+ *   html.redblurer-boot        blur everything, we have not read settings yet
+ *   html.redblurer-locked      "never unblur on hover" is on
+ *   [data-redblurer=blurred]   hidden
+ *   [data-redblurer=revealed]  user revealed it and asked us to remember
+ *   [data-redblurer-hover]     pointer is over it right now
+ *
+ * Media we are not acting on carries no attribute at all.
+ *
+ * The hover state is an attribute rather than the :hover pseudo-class on
+ * purpose. Feeds routinely stack a transparent overlay on top of an image,
+ * which swallows :hover on the image underneath; content.js hit-tests the
+ * cursor instead, so reveal still works on those sites.
+ */
+
+:root {
+  --redblurer-radius: 18px;
+  --redblurer-ease: cubic-bezier(0.2, 0, 0, 1);
+  --redblurer-duration: 200ms;
+}
+
+/* ── Pre-settings guard ──────────────────────────────────────────────────
+   Reading settings is asynchronous, so for the first few milliseconds we do
+   not yet know whether this page is in scope. Blur first and relax after:
+   a brief blur on a page you did not want blurred is a much smaller failure
+   than a brief flash of the page you did. */
+html.redblurer-boot :is(img, video, [style*="background-image"]) {
+  filter: blur(var(--redblurer-radius)) !important;
+}
+
+/* ── States ──────────────────────────────────────────────────────────────
+   Blur lands instantly. Animating it in would mean briefly showing the very
+   thing we are hiding, which is the one failure this extension exists to
+   prevent. */
+[data-redblurer="blurred"] {
+  filter: blur(var(--redblurer-radius)) !important;
+  cursor: pointer !important;
+}
+
+/* Revealing is the only direction worth animating. Moving the pointer away
+   drops straight back to blurred, with no fade to be caught out by. */
+[data-redblurer="blurred"][data-redblurer-hover],
+[data-redblurer="blurred"]:hover {
+  filter: blur(0) !important;
+  transition: filter var(--redblurer-duration) var(--redblurer-ease) !important;
+}
+
+/* Deliberately declares no filter of its own. Media the user has revealed
+   goes back to however the page styled it, animating on the way. A page that
+   applies its own filter to an image keeps it. */
+[data-redblurer="revealed"] {
+  transition: filter var(--redblurer-duration) var(--redblurer-ease) !important;
+}
+
+/* There is no rule for media we are not acting on. When the extension is off
+   or the page is out of scope, content.js removes the attribute entirely and
+   leaves no trace, rather than forcing filter: none over the site's own
+   styling. */
+
+/* ── Locked ──────────────────────────────────────────────────────────────
+   "Never unblur on hover" outranks both reveal paths on specificity. */
+html.redblurer-locked [data-redblurer="blurred"] {
+  filter: blur(var(--redblurer-radius)) !important;
+  cursor: default !important;
+  transition: none !important;
+}
+
+/* ── Motion preference ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  [data-redblurer],
+  [data-redblurer][data-redblurer-hover] {
+    transition: none !important;
+  }
+}

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RedBlurer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <!-- ── Top app bar ─────────────────────────────────────────────────── -->
+    <header class="top-app-bar">
+      <span class="top-app-bar__leading" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none">
+          <path
+            d="M2.5 12C4.75 7.5 7.9 5.2 12 5.2s7.25 2.3 9.5 6.8c-2.25 4.5-5.4 6.8-9.5 6.8S4.75 16.5 2.5 12Z"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round"
+          />
+          <circle cx="12" cy="12" r="2.8" stroke="currentColor" stroke-width="1.7" />
+          <path d="M4.5 4.5 19.5 19.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+        </svg>
+      </span>
+      <h1 class="top-app-bar__title">RedBlurer</h1>
+      <span class="badge" id="version-badge">—</span>
+    </header>
+
+    <main class="content">
+      <!-- ── Primary switch ────────────────────────────────────────────── -->
+      <section class="hero" id="hero">
+        <div class="hero__text">
+          <h2 class="hero__headline" id="status-headline">Blur active</h2>
+          <p class="hero__supporting" id="status-supporting">
+            Images and videos are hidden
+          </p>
+        </div>
+
+        <div class="switch">
+          <input
+            class="switch__input"
+            type="checkbox"
+            role="switch"
+            id="enabled"
+            aria-labelledby="status-headline"
+            aria-describedby="status-supporting"
+          />
+          <span class="switch__track" aria-hidden="true">
+            <span class="switch__handle-container">
+              <span class="switch__state-layer"></span>
+              <span class="switch__handle">
+                <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16">
+                  <path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16">
+                  <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </span>
+            </span>
+          </span>
+        </div>
+      </section>
+
+      <!-- ── Behaviour ─────────────────────────────────────────────────── -->
+      <section class="card" aria-labelledby="behaviour-title">
+        <h3 class="card__title" id="behaviour-title">Behaviour</h3>
+
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="lockBlur-label">Never unblur on hover</span>
+            <span class="list-item__supporting" id="lockBlur-desc">
+              Keep everything hidden, even under the cursor
+            </span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="lockBlur"
+              aria-labelledby="lockBlur-label" aria-describedby="lockBlur-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="list-item" id="keepRevealed-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="keepRevealed-label">Keep media unblurred</span>
+            <span class="list-item__supporting" id="keepRevealed-desc">
+              Once you reveal something, leave it visible
+            </span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="keepRevealed"
+              aria-labelledby="keepRevealed-label" aria-describedby="keepRevealed-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="list-item list-item--stacked">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="radius-label">Blur strength</span>
+            <span class="list-item__supporting" id="radius-value">18 pixels</span>
+          </span>
+          <input
+            class="slider"
+            type="range"
+            id="blurRadius"
+            min="4"
+            max="60"
+            step="1"
+            value="18"
+            aria-labelledby="radius-label"
+            aria-describedby="radius-value"
+          />
+        </div>
+      </section>
+
+      <!-- ── Where ─────────────────────────────────────────────────────── -->
+      <section class="card" aria-labelledby="scope-title">
+        <h3 class="card__title" id="scope-title">Where to blur</h3>
+
+        <div class="list-item">
+          <span class="list-item__text">
+            <span class="list-item__headline" id="blurEverywhere-label">Blur on every site</span>
+            <span class="list-item__supporting" id="blurEverywhere-desc">
+              Turn this off to use the list below instead
+            </span>
+          </span>
+          <div class="switch">
+            <input class="switch__input" type="checkbox" role="switch" id="blurEverywhere"
+              aria-labelledby="blurEverywhere-label" aria-describedby="blurEverywhere-desc" />
+            <span class="switch__track" aria-hidden="true">
+              <span class="switch__handle-container">
+                <span class="switch__state-layer"></span>
+                <span class="switch__handle">
+                  <svg class="switch__icon switch__icon--on" viewBox="0 0 16 16" width="16" height="16"><path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  <svg class="switch__icon switch__icon--off" viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+                </span>
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="field" id="domains-field">
+          <div class="text-field">
+            <textarea
+              class="text-field__input"
+              id="domains"
+              rows="4"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder=" "
+              aria-describedby="domains-support"
+            ></textarea>
+            <label class="text-field__label" for="domains">Domain list</label>
+          </div>
+          <p class="supporting-text" id="domains-support">
+            One per line. Subdomains are included automatically.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Config transfer ───────────────────────────────────────────── -->
+      <section class="actions">
+        <button class="button button--outlined" id="export" type="button">Export</button>
+        <button class="button button--tonal" id="import" type="button">Import</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden />
+      </section>
+
+      <p class="footnote">Keep your feed to yourself.</p>
+    </main>
+
+    <!-- ── Snackbar ──────────────────────────────────────────────────────── -->
+    <div class="snackbar" id="snackbar" role="status" aria-live="polite"></div>
+
+    <script src="../shared/config.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
