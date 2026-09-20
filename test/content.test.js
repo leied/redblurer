@@ -397,6 +397,73 @@ function hover(env, el) {
   env.document.dispatchEvent(event);
 }
 
+/** Move the pointer while controlling the browser's hit-test stack. */
+function hoverStack(env, stack) {
+  env.document.elementsFromPoint = () => stack;
+  const event = new env.window.MouseEvent("pointermove", {
+    bubbles: true,
+    clientX: 10,
+    clientY: 10,
+  });
+  env.document.dispatchEvent(event);
+}
+
+test("hover finds a photo behind a pointer-targetable feed overlay", async () => {
+  const env = await loadContentScript({
+    url: "https://x.com/home",
+    body: `
+      <article id="post">
+        <a id="photo-link" href="/someone/status/1/photo/1">
+          <img id="photo" src="photo.jpg">
+          <div id="overlay"></div>
+        </a>
+      </article>
+    `,
+  });
+  const photo = sized(env.document.getElementById("photo"), 100, 100);
+  const overlay = env.document.getElementById("overlay");
+  const link = env.document.getElementById("photo-link");
+
+  // X's overlay can be the hit target while the image itself is absent from
+  // elementsFromPoint(), which is the behavior that used to break photos but
+  // not the site's differently structured video player.
+  hoverStack(env, [overlay, link]);
+  await env.settle();
+
+  assert.equal(stateOf(photo), "blurred");
+  assert.ok(photo.hasAttribute("data-redblurer-hover"));
+});
+
+test("releasing the blur lock reveals an X photo already under the pointer", async () => {
+  const env = await loadContentScript({
+    url: "https://x.com/home",
+    body: `
+      <article>
+        <a id="photo-link" href="/someone/status/1/photo/1">
+          <img id="photo" src="photo.jpg">
+          <div id="overlay"></div>
+        </a>
+      </article>
+    `,
+    stored: { lockBlur: true },
+  });
+  const photo = sized(env.document.getElementById("photo"), 100, 100);
+  const overlay = env.document.getElementById("overlay");
+  const link = env.document.getElementById("photo-link");
+
+  hoverStack(env, [overlay, link]);
+  await env.settle();
+  assert.equal(photo.hasAttribute("data-redblurer-hover"), false);
+
+  // This is the content-side result of pressing the panic shortcut again:
+  // the background worker writes lockBlur=false and the current hover should
+  // be restored without requiring another pointer movement.
+  env.chrome.write({ lockBlur: false });
+  await env.settle();
+
+  assert.ok(photo.hasAttribute("data-redblurer-hover"));
+});
+
 async function revealOne(env) {
   const img = env.document.querySelector("img");
   hover(env, img);

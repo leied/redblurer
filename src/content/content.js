@@ -353,6 +353,43 @@
         if (el.hasAttribute && el.hasAttribute(STATE_ATTR)) return el;
       }
 
+      // Some feeds (notably X photo posts) put a pointer-targetable overlay
+      // in front of an <img>, or give the image pointer-events: none. Such an
+      // image is deliberately omitted from elementsFromPoint(), even though
+      // it is the thing visibly under the cursor. Walk the smallest hit-tested
+      // containers and recover a managed descendant whose painted box really
+      // contains the pointer. Avoid body/html: scanning an entire infinite
+      // feed on every pointer frame would be needlessly expensive.
+      for (const container of stack) {
+        if (!container.querySelectorAll) continue;
+        if (container === document.body || container === root) continue;
+
+        let candidates;
+        try {
+          candidates = container.querySelectorAll(
+            `[${STATE_ATTR}="${STATE.BLURRED}"]`,
+          );
+        } catch {
+          continue;
+        }
+
+        let best = null;
+        let bestArea = Infinity;
+        for (const candidate of candidates) {
+          const rect = measure(candidate);
+          if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+            continue;
+          }
+          const area = rect.width * rect.height;
+          if (area < bestArea) {
+            best = candidate;
+            bestArea = area;
+          }
+        }
+        if (best) return best;
+      }
+
       const host = stack.find((el) => el.shadowRoot);
       if (!host) return null;
       scope = host.shadowRoot;
