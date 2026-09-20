@@ -5,7 +5,7 @@
   "description": "Chrome extension that blurs images and videos while you browse.",
   "license": "MIT",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test \"test/**/*.test.js\""
   },
   "devDependencies": {
     "jsdom": "^30.1.0"
